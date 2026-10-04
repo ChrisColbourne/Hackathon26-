@@ -47,6 +47,7 @@ from .voice import Voice
 
 log = logging.getLogger("server")
 CAMERA_ENABLED = os.getenv("CAMERA_ENABLED", "0") == "1"
+BLANK_BOARD = np.full((config.BOARD_H, config.BOARD_W, 3), 255, np.uint8)   # chat with the camera off
 
 
 class Brain:
@@ -66,6 +67,7 @@ class Brain:
         self.last_box: list[int] | None = None    # line the otter last flagged (preview overlay)
         self.check_requested = asyncio.Event()
         self.busy = asyncio.Lock()
+        self.talking = False                      # a voice turn (listen -> answer) is in progress
         self.state: Mood = "idle"
 
     # ---- fan-out to apps --------------------------------------------------
@@ -98,6 +100,7 @@ class Brain:
             await self.set_state("thinking")
             jpeg = encode_jpeg(enhance(flat), max_w=config.JPEG_MAX_W)
             ctx = self.session.context(on_demand)
+            said = ctx.get("student_said")
             try:
                 # daemon thread: an in-flight Gemini call must not delay shutdown
                 analysis = await asyncio.wrap_future(run_in_daemon(self.gemini.see, jpeg, ctx, name="gemini"))
@@ -108,12 +111,13 @@ class Brain:
                 return {"ok": False, "error": str(e)}
             self.session.consume_heard()
             vres = verify(analysis)
-            decision = self.policy.decide(analysis, vres, on_demand=on_demand)
+            decision = self.policy.decide(analysis, vres, on_demand=on_demand, said=said)
             self.last_box = decision.box if decision.speak else None
             self.session.add_check(analysis, vres, decision, on_demand)
             fe = analysis.first_error
             log.info("CHECK #%d (%s, %s): %s | %s | otter %s",
-                     len(self.session.checks), "on demand" if on_demand else "auto", self.gemini.last_model,
+                     len(self.session.checks), "reply" if said else "on demand" if on_demand else "auto",
+                     self.gemini.last_model,
                      analysis.problem or "(no problem found)",
                      f"line {fe.line} {fe.status.value}: {fe.latex}" if fe else "no mistake",
                      f'SAYS "{decision.text}"' if decision.speak else f"quiet ({decision.reason})")
@@ -131,6 +135,66 @@ class Brain:
             return {"ok": True, "analysis": analysis.model_dump(mode="json"),
                     "decision": {"speak": decision.speak, "text": decision.text, "mood": decision.mood,
                                  "line": decision.line, "reason": decision.reason}}
+
+    async def stuck(self) -> None:
+        """Nothing has moved for STUCK_AFTER_S. With a pointed-out mistake still on
+        the board: its more specific hint, once. Otherwise a gentle offer to help."""
+        async with self.busy:
+            hint = self.policy.escalate()
+            if hint is not None:
+                log.info('STUCK: otter SAYS "%s"', hint.text)
+                self.last_box = hint.box
+                await self.broadcast(Nudge(text=hint.text, line=hint.line, kind=hint.kind,
+                                           mood=hint.mood).model_dump(mode="json"))
+                await asyncio.gather(asyncio.to_thread(self.voice.speak, hint.text, hint.mood),
+                                     self.robot.show(hint.mood, hint.box))
+                await self.set_state("confused")
+                return
+            await self.set_state("thinking")
+            await self.broadcast({"event": "stuck", "text": config.STUCK_PROMPT})
+            if config.STUCK_PROMPT:
+                await asyncio.to_thread(self.voice.speak, config.STUCK_PROMPT, "thinking")
+
+    # ---- talking with the student -------------------------------------------
+    async def voice_turn(self) -> None:
+        """`t` key / app `talk`: listen on the laptop mic until the student stops
+        talking, transcribe, and answer. A second tap while listening stops early."""
+        if self.voice.listening:
+            self.voice.stop_listening()
+            return
+        if self.talking or self.busy.locked():
+            log.info("busy (still answering); tap t again in a moment")
+            return
+        self.talking = True
+        try:
+            await self.set_state("listening")
+            await self.broadcast({"event": "listening"})
+            try:
+                text = await asyncio.wrap_future(run_in_daemon(self.voice.listen, name="listen"))
+            except Exception as e:
+                log.error("listening failed: %s", e)
+                text = ""
+            if not text:
+                await asyncio.to_thread(self.voice.speak, "Sorry, I didn't catch that. Tap and try again?",
+                                        "thinking")
+                await self.set_state("idle")
+                return
+            log.info('HEARD: "%s"', text)
+            await self.answer_heard(text)
+        finally:
+            self.talking = False
+
+    async def answer_heard(self, text: str) -> None:
+        """Answer what the student said, looking at the current board (or a blank
+        one when the camera is off, so plain chat still works)."""
+        await self.broadcast({"event": "heard", "text": text})
+        self.session.add_heard(text)
+        flat = self.latest_flat if self.latest_flat is not None else BLANK_BOARD
+        result = await self.run_check(flat, on_demand=True)
+        if not result.get("ok"):
+            await asyncio.to_thread(self.voice.speak, "Sorry, my brain is a little slow right now. "
+                                    "Ask me again in a moment.", "thinking")
+            await self.set_state("idle")
 
     # ---- camera loop ---------------------------------------------------------
     async def camera_loop(self) -> None:
@@ -162,17 +226,14 @@ class Brain:
                 trigger = det.update(flat) and not dark
                 on_demand = self.check_requested.is_set() and not dark
 
-                if (det.idle_seconds() > config.STUCK_AFTER_S and not stuck_announced
-                        and self.state in ("idle", "listening") and not self.busy.locked()):
+                if (det.idle_seconds() > config.STUCK_AFTER_S and not stuck_announced and not self.talking
+                        and self.state in ("idle", "listening", "confused") and not self.busy.locked()):
                     stuck_announced = True
-                    await self.set_state("thinking")
-                    await self.broadcast({"event": "stuck", "text": config.STUCK_PROMPT})
-                    if config.STUCK_PROMPT:
-                        await asyncio.to_thread(self.voice.speak, config.STUCK_PROMPT, "thinking")
+                    await self.stuck()
                 if det.last_motion > det.motion_thr:
                     stuck_announced = False
 
-                if (trigger or on_demand) and not self.busy.locked():
+                if (trigger or on_demand) and not self.busy.locked() and not self.talking:
                     self.check_requested.clear()
                     det.mark_analyzed(flat)
                     await self.run_check(flat, on_demand)
@@ -187,11 +248,12 @@ class Brain:
                 self.check_requested.set()
             else:
                 await self.broadcast({"event": "error", "text": "no camera frame; POST /check with an image"})
-        elif cmd == "student_said":
-            self.session.add_heard(str(msg.get("text", "")))
-            await self.set_state("listening")
-            if CAMERA_ENABLED:
-                self.check_requested.set()  # answer against the current board
+        elif cmd == "talk":         # same as the `t` key: listen on the laptop mic
+            asyncio.create_task(self.voice_turn())
+        elif cmd == "student_said":  # typed instead of spoken
+            text = str(msg.get("text", "")).strip()
+            if text:
+                asyncio.create_task(self.answer_heard(text))
         elif cmd == "stuck":
             await self.set_state("thinking")
             if CAMERA_ENABLED:
@@ -212,6 +274,18 @@ class Brain:
 brain = Brain()
 
 
+def laptop_ip() -> str:
+    """This laptop's address on the current network (a UDP connect sends nothing)."""
+    import socket
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except OSError:
+        return "?"
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     logging.basicConfig(level=logging.INFO, format="%(levelname).1s %(name)s: %(message)s")
@@ -220,6 +294,10 @@ async def lifespan(_: FastAPI):
     task = asyncio.create_task(brain.camera_loop()) if CAMERA_ENABLED else None
     log.info("brain up. camera=%s vision=%s models=%s%s", CAMERA_ENABLED, BACKEND,
              [m for m, _ in brain.gemini.chain], "  (MOCK MODE, no Gemini calls)" if config.GEMINI_MOCK else "")
+    log.info("voice=%s mic=%s", "ElevenLabs" if brain.voice.live else "mock (no ELEVENLABS_API_KEY)",
+             brain.voice.mic.description if brain.voice.mic else "NONE")
+    log.info("waiting for the robot at ws://%s:%d/robot  (must match SERVER_HOST in the firmware's secrets.h)",
+             laptop_ip(), config.PORT)
     yield
     if task:
         task.cancel()
@@ -232,7 +310,8 @@ app = FastAPI(title="Otter Tutor brain", lifespan=lifespan)
 async def health() -> dict[str, Any]:
     return {"ok": True, "robot": brain.robot.connected, "robot_ready": brain.robot.ready,
             "apps": len(brain.apps), "checks": len(brain.session.checks), "gemini_calls": brain.gemini.calls,
-            "vision": BACKEND, "camera": CAMERA_ENABLED, "voice_live": brain.voice.live, "state": brain.state,
+            "vision": BACKEND, "camera": CAMERA_ENABLED, "voice_live": brain.voice.live,
+            "mic": brain.voice.mic.description if brain.voice.mic else None, "state": brain.state,
             "mock": config.GEMINI_MOCK}
 
 
@@ -297,8 +376,8 @@ if _app_dir.is_dir():
 
 def preview(server: Any) -> None:
     """Camera preview + keys on the MAIN thread (Qt requires it) while uvicorn
-    serves from a background thread. c = check now, b = toggle board detection,
-    q / Esc / closing the window = stop the server."""
+    serves from a background thread. c = check now, t = talk to the otter,
+    b = toggle board detection, q / Esc / closing the window = stop the server."""
     import threading
 
     from .run_cli import WINDOW, _terminal_key, _window_key, quiet_qt_fonts
@@ -306,7 +385,7 @@ def preview(server: Any) -> None:
     quiet_qt_fonts()
     cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)       # resizable; the board image is 1600x900
     cv2.resizeWindow(WINDOW, 1280, 720)
-    print("keys: c = check now, b = toggle board detection, q = quit. "
+    print("keys: c = check now, t = talk (tap, then speak), b = toggle board detection, q = quit. "
           "Click the preview window first, or type the key + Enter here.")
     waiting = np.full((360, 640, 3), 40, np.uint8)
     cv2.putText(waiting, "waiting for the camera...", (140, 185), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (220, 220, 220), 2)
@@ -323,7 +402,10 @@ def preview(server: Any) -> None:
             status = (f"state={brain.state}  robot={'connected' if brain.robot.connected else 'NOT connected'}  "
                       f"detect={'on' if brain.board_detect else 'off'} board={'yes' if brain.latest_found else 'no'}")
             cv2.putText(view, status, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 128, 0), 2)
-            if brain.busy.locked():
+            if brain.voice.listening:
+                cv2.putText(view, "LISTENING... (speak, or tap t to stop)", (10, h - 20),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 120, 0), 2)
+            elif brain.busy.locked():
                 cv2.putText(view, "checking...", (10, h - 20), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
         key = _window_key(view) or _terminal_key()
         if key == "q":
@@ -337,6 +419,14 @@ def preview(server: Any) -> None:
             elif brain.loop is not None:
                 print("checking board now...")
                 brain.loop.call_soon_threadsafe(brain.check_requested.set)   # asyncio.Event: set it on its loop
+        if key == "t" and brain.loop is not None:
+            if brain.voice.listening:
+                print("ok, stopped listening")
+            elif brain.talking or brain.busy.locked():
+                print("still answering; tap t again in a moment")
+            else:
+                print("listening... speak now (tap t again to stop early)")
+            asyncio.run_coroutine_threadsafe(brain.voice_turn(), brain.loop)
     server.should_exit = True
     cv2.destroyAllWindows()
     for t in threading.enumerate():

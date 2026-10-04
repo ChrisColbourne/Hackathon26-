@@ -29,10 +29,12 @@ class Robot:
         self._ws: _Socket | None = None
         self.ready = False
         self.last_status: dict[str, Any] | None = None
+        self._warned_mock = False
 
     # ---- connection ---------------------------------------------------
     def attach(self, ws: _Socket) -> None:
         self._ws = ws
+        self._warned_mock = False
         log.info("robot attached")
 
     def detach(self, ws: _Socket | None = None) -> None:
@@ -60,6 +62,10 @@ class Robot:
         payload = json.dumps(cmd.model_dump(exclude_none=True))
         ws = self._ws
         if ws is None:
+            if not self._warned_mock:
+                self._warned_mock = True
+                log.warning("NO ROBOT CONNECTED: the face, laser and head won't move. Is the ESP32 on, and "
+                            "is this laptop on the same Wi-Fi as it, at the IP in secrets.h (SERVER_HOST)?")
             # mouth levels arrive ~15x/s while talking; keep them out of INFO logs
             (log.debug if cmd.action == "mouth" else log.info)("[MOCK ROBOT] %s", payload)
             return

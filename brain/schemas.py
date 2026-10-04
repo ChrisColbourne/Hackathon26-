@@ -49,6 +49,12 @@ class Step(BaseModel):
         default=None,
         description="One sentence, internal: what exactly is wrong. May name the fix. Never spoken.",
     )
+    action: Optional[str] = Field(
+        default=None,
+        description="What the student did on this line, as a short past-tense phrase with no symbols or "
+        "rule names: 'took the derivative', 'simplified the fraction', 'added', 'integrated', "
+        "'expanded the brackets'.",
+    )
 
     @field_validator("box")
     @classmethod
@@ -73,11 +79,28 @@ class BoardAnalysis(BaseModel):
     )
     confidence: float = Field(ge=0.0, le=1.0, description="How sure you are of the verdict overall.")
     nudge: str = Field(
-        description="What the otter says. One short sentence. May name the line number and the KIND "
-        "of slip (rule choice / how the rule was applied / arithmetic). MUST NOT name the "
-        "correct rule or write any corrected math. Empty string if nothing to flag.",
+        description="What the otter says first. One short sentence naming what the student was doing on "
+        "the wrong line and its number: 'Check how you took the derivative on line 1.' MUST NOT name "
+        "the correct rule or write any corrected math. Empty string if nothing to flag.",
+    )
+    hint: str = Field(
+        default="",
+        description="The next, more specific hint if they're still stuck: points at the PART of the wrong "
+        "line (a term, exponent, sign, the denominator, what happened to x), with the line number. "
+        "Same MUST NOTs as the nudge. Empty string if nothing to flag.",
     )
     mood: Mood
+    reply: str = Field(
+        default="",
+        description="Only when the student said something: what the otter says back, 1-2 short spoken "
+        "sentences. Answers small talk and questions; about their work it follows the nudge rules. "
+        "Never gives the answer, a corrected step, a formula or the rule to use. No symbols or "
+        "equations (it is spoken aloud). Empty string if the student said nothing.",
+    )
+    reply_about_error: bool = Field(
+        default=False,
+        description="True if `reply` is about the student's mistake on first_error_line, else false.",
+    )
 
     @property
     def first_error(self) -> Optional[Step]:

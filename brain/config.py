@@ -68,6 +68,24 @@ BOARD_W, BOARD_H = 1600, 900
 BOARD_DETECT = os.getenv("BOARD_DETECT", "1") == "1"
 JPEG_MAX_W = int(os.getenv("JPEG_MAX_W", "1600"))
 
+# Voice (ElevenLabs). Speech plays on the laptop speakers, the student is heard
+# through the laptop's own mic; the ESP32 only gets the face and mouth levels.
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
+# "Jessica - Playful, Bright, Warm": a premade voice, so any API key can use it.
+VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "cgSgspJ2msm6clMCkdW9")
+TTS_MODEL = os.getenv("ELEVENLABS_MODEL", "eleven_flash_v2_5")     # fastest, cheapest per character
+STT_MODEL = os.getenv("ELEVENLABS_STT_MODEL", "scribe_v2")
+STT_LANGUAGE = os.getenv("ELEVENLABS_STT_LANGUAGE", "en")          # empty = auto-detect
+# Mic: part of the device name ("Digital Microphone"). Empty = the laptop's
+# built-in mic. Webcam mics are never picked, even if they're the system default.
+MIC_NAME = os.getenv("MIC_NAME", "")
+SPEAKER_NAME = os.getenv("SPEAKER_NAME", "")      # empty = the system's default output
+LISTEN_MAX_S = float(os.getenv("LISTEN_MAX_S", "15"))        # longest question
+LISTEN_SILENCE_S = float(os.getenv("LISTEN_SILENCE_S", "1.0"))  # this much quiet after speaking = done
+LISTEN_START_S = float(os.getenv("LISTEN_START_S", "6"))     # give up if nobody speaks this long
+# Spoken lines are cached here (gitignored), so repeats cost no credits and play instantly.
+TTS_CACHE_DIR = Path(os.getenv("TTS_CACHE_DIR", ROOT / "brain" / "tts_cache"))
+
 # Every analysed frame + Gemini reply is saved here (gitignored). Feeds the
 # demo cache at H18 and gives us real test fixtures.
 RECORD_DIR = Path(os.getenv("RECORD_DIR", ROOT / "brain" / "recordings"))

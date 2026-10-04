@@ -89,6 +89,7 @@ def report(a: BoardAnalysis, v: VerifierResult, d: Decision, model: str | None) 
     for dis in v.disagreements:
         print(f" sympy disagrees: {dis}")
     print(f" gemini nudge: {a.nudge!r}")
+    print(f" gemini hint:  {a.hint!r}")
     print(f" decision: speak={d.speak} mood={d.mood} reason={d.reason}")
     if d.speak:
         print(f"\n   OTTER SAYS: \"{d.text}\"\n")
