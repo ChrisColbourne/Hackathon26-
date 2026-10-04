@@ -108,7 +108,7 @@ class Brain:
                 return {"ok": False, "error": str(e)}
             self.session.consume_heard()
             vres = verify(analysis)
-            decision = self.policy.decide(analysis, vres)
+            decision = self.policy.decide(analysis, vres, on_demand=on_demand)
             self.last_box = decision.box if decision.speak else None
             self.session.add_check(analysis, vres, decision, on_demand)
             fe = analysis.first_error

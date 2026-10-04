@@ -68,7 +68,7 @@ def check(brain: Brain, policy: Policy, flat: np.ndarray, context: dict | None =
     jpeg = encode_jpeg(enhance(flat), max_w=config.JPEG_MAX_W)
     analysis = brain.see(jpeg, context)
     vres = verify(analysis)
-    decision = policy.decide(analysis, vres)
+    decision = policy.decide(analysis, vres, on_demand=bool(context and context.get("on_demand")))
     return analysis, vres, decision
 
 

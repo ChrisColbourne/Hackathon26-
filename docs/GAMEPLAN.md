@@ -154,7 +154,7 @@ stretch list, don't move the freeze.
 3. `vision/` C++: find the whiteboard quad, warp it flat, return a change score
    vs the last analysed frame. Python fallback if the build fails.
 4. "Settled" detector: changed, then still for ~5 s, at most one auto-check per
-   12 s → trigger a check. Never call Gemini while the hand is in the frame or
+   5 s → trigger a check. Never call Gemini while the hand is in the frame or
    ink is still appearing; a student pausing between strokes must not drain quota.
 5. `verifier.py`: SymPy re-derives derivatives/integrals/algebra from the problem
    and compares to the student's line. Gemini says "wrong", SymPy confirms;

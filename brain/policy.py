@@ -85,8 +85,45 @@ class Policy:
     _praised: set[str] = field(default_factory=set)
     _last_spoke: float = -1e9
 
-    def decide(self, a: BoardAnalysis, v: VerifierResult | None = None, now: float | None = None) -> Decision:
+    def decide(self, a: BoardAnalysis, v: VerifierResult | None = None, now: float | None = None,
+               on_demand: bool = False) -> Decision:
+        """Auto checks stay quiet unless there's something new to say. When the
+        student asks (on_demand: the `c` key, app button, "check my work"), the
+        otter always answers, still without ever giving away the fix."""
         now = time.monotonic() if now is None else now
+        d = self._decide_auto(a, v, now)
+        if on_demand and not d.speak:
+            d = self._answer(a, v, d)
+            self._last_spoke = now
+        return d
+
+    def _answer(self, a: BoardAnalysis, v: VerifierResult | None, quiet: Decision) -> Decision:
+        """What to say when asked, for each reason the auto check stayed quiet."""
+        fe = a.first_error
+        why = quiet.reason
+        if why == "board incomplete":
+            return Decision(True, "Finish writing that line, then ask me again.", mood="thinking", reason="asked")
+        if fe is not None:
+            if v is not None and v.veto_line == fe.line:
+                return Decision(True, "That step looks right to me.", mood="happy", reason="asked")
+            if why.startswith("confidence"):
+                return Decision(True, "I can't read that clearly. Could you write it a little bigger?",
+                                mood="thinking", reason="asked")
+            # already flagged / cooldown: say it again, and point at it again
+            return Decision(True, sanitize_nudge(a.nudge, fe.status, fe.line), mood="confused",
+                            line=fe.line, kind=fe.status, box=fe.box, reason="asked")
+        all_ok = bool(a.steps) and all(s.status == StepStatus.OK for s in a.steps)
+        if all_ok and has_work(a):
+            return Decision(True, "Yes, that all checks out.", mood="happy", reason="asked")
+        if not has_work(a) and a.problem.strip():
+            return Decision(True, "Go ahead and start. I'll check each step as you go.", mood="listening",
+                            reason="asked")
+        if not a.problem.strip():
+            return Decision(True, "I don't see a problem on the board yet.", mood="thinking", reason="asked")
+        return Decision(True, "I can't read part of that. Could you rewrite it more clearly?",
+                        mood="thinking", reason="asked")
+
+    def _decide_auto(self, a: BoardAnalysis, v: VerifierResult | None, now: float) -> Decision:
         key_problem = a.problem.strip() or a.board_text.strip()[:80]
 
         if not a.board_complete:

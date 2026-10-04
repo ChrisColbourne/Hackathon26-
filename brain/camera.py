@@ -145,7 +145,7 @@ class SettleDetector:
     # board (Oct 3): static camera noise 0.00000, erasing one 'x' 0.00033,
     # '= 2' -> '= 8x' 0.0016. The old 0.015 missed every small edit.
     change_thr: float = 0.0001
-    min_interval_s: float = 12.0  # at most one auto-check this often
+    min_interval_s: float = 5.0   # at most one auto-check this often
     _prev: np.ndarray | None = field(default=None, repr=False)
     _last_analyzed: np.ndarray | None = field(default=None, repr=False)
     _still_since: float = field(default_factory=time.monotonic)

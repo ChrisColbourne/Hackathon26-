@@ -54,7 +54,7 @@ CAMERA_H = int(os.getenv("CAMERA_H", "1080"))
 # every pause while writing (12 checks in two minutes on the first live test).
 STILL_S = float(os.getenv("STILL_S", "5"))
 # ...and never more often than this. Quota guard; on-demand checks bypass it.
-MIN_CHECK_INTERVAL_S = float(os.getenv("MIN_CHECK_INTERVAL_S", "12"))
+MIN_CHECK_INTERVAL_S = float(os.getenv("MIN_CHECK_INTERVAL_S", "5"))
 # Fraction of pixels that must differ from the last checked board to re-check.
 # 0.0001 catches erasing a single character; raise it if lighting flicker
 # (projector, window) causes checks with nothing new on the board.
