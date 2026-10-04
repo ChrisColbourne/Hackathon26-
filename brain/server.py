@@ -114,11 +114,9 @@ class Brain:
             if decision.speak:
                 await self.broadcast(Nudge(text=decision.text, line=decision.line, kind=decision.kind,
                                            mood=decision.mood).model_dump(mode="json"))
-                tasks = [asyncio.to_thread(self.voice.speak, decision.text, decision.mood),
-                         self.robot.react(decision.mood)]
-                if decision.box is not None:
-                    tasks.append(self.robot.point_at(decision.box))
-                await asyncio.gather(*tasks)
+                # voice and robot in parallel, but the robot's own steps stay in order
+                await asyncio.gather(asyncio.to_thread(self.voice.speak, decision.text, decision.mood),
+                                     self.robot.show(decision.mood, decision.box))
             await self.set_state(decision.mood if decision.mood in ("happy", "confused") else "idle")
             return {"ok": True, "analysis": analysis.model_dump(mode="json"),
                     "decision": {"speak": decision.speak, "text": decision.text, "mood": decision.mood,
@@ -238,6 +236,7 @@ async def check(image: UploadFile = File(...)) -> dict[str, Any]:
 
 
 @app.websocket("/ws/robot")
+@app.websocket("/robot")          # the firmware's default SERVER_PATH
 async def ws_robot(ws: WebSocket) -> None:
     await ws.accept()
     brain.robot.attach(ws)
@@ -255,7 +254,7 @@ async def ws_robot(ws: WebSocket) -> None:
     except WebSocketDisconnect:
         pass
     finally:
-        brain.robot.detach()
+        brain.robot.detach(ws)
 
 
 @app.websocket("/ws/app")

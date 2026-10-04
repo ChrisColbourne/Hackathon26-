@@ -96,9 +96,9 @@ def report(a: BoardAnalysis, v: VerifierResult, d: Decision, model: str | None) 
 
 
 async def act(robot: Robot, d: Decision) -> None:
-    await robot.react(d.mood)
-    if d.speak and d.box is not None:
-        await robot.point_at(d.box, hold_s=0.2)
+    # The CLI never has a real ESP32 attached (commands print as [MOCK ROBOT]),
+    # so keep the laser hold short instead of freezing the preview for 4 s.
+    await robot.show(d.mood, d.box if d.speak else None, hold_s=0.2)
 
 
 def run_image(path: Path, brain: Brain, policy: Policy, robot: Robot) -> int:

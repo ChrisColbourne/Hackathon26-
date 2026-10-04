@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 import math
 import os
+import threading
 import time
 from typing import Callable
 
@@ -87,18 +88,24 @@ class Voice:
             voice_settings=MOOD_SETTINGS.get(mood, MOOD_SETTINGS["confused"]),
         )
         data = b"".join(audio) if not isinstance(audio, (bytes, bytearray)) else bytes(audio)
-        # TODO(C): decode + measure RMS ~15x/s -> self.on_mouth(level) while playing.
-        self._fake_mouth(len(text) * 0.055, start=time.monotonic())
-        play(data)  # needs ffplay or mpv on PATH
+        # TODO(C): decode + measure RMS ~15x/s -> self.on_mouth(level) for real lip sync.
+        # Until then a synthetic envelope runs for as long as the audio plays; the
+        # LCD otter only opens its mouth while it keeps receiving mouth levels.
+        stop = threading.Event()
+        mouth = threading.Thread(target=self._fake_mouth, args=(30.0, time.monotonic(), stop), daemon=True)
+        mouth.start()
+        try:
+            play(data)  # blocks until playback ends; needs ffplay or mpv on PATH
+        finally:
+            stop.set()
+            mouth.join(timeout=0.5)
 
     def _speak_mock(self, text: str) -> None:
         print(f'\n   🦦 OTTER SAYS: "{text}"\n')
-        self._fake_mouth(min(6.0, 0.6 + len(text) * 0.055), start=time.monotonic(), block=True)
+        self._fake_mouth(min(6.0, 0.6 + len(text) * 0.055), time.monotonic())
 
-    def _fake_mouth(self, duration: float, start: float, block: bool = False) -> None:
-        """Sine-ish mouth envelope so the LCD otter talks even in mock mode."""
-        if not block:
-            return
-        while (t := time.monotonic() - start) < duration:
+    def _fake_mouth(self, duration: float, start: float, stop: threading.Event | None = None) -> None:
+        """Sine-ish mouth envelope at ~15 Hz, for `duration` s or until `stop` is set."""
+        while (t := time.monotonic() - start) < duration and not (stop and stop.is_set()):
             self.on_mouth(0.5 + 0.5 * abs(math.sin(t * 9.0)))
             time.sleep(1 / 15)
