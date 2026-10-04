@@ -35,7 +35,12 @@ class Robot:
         self._ws = ws
         log.info("robot attached")
 
-    def detach(self) -> None:
+    def detach(self, ws: _Socket | None = None) -> None:
+        """Forget the robot. Pass the socket that closed: after a Wi-Fi blip the
+        ESP32 reconnects before the server notices the old socket died, and that
+        late close must not detach the new, live connection."""
+        if ws is not None and ws is not self._ws:
+            return
         self._ws = None
         self.ready = False
         log.info("robot detached")
@@ -53,15 +58,16 @@ class Robot:
     # ---- primitives ---------------------------------------------------
     async def send(self, cmd: RobotCommand) -> None:
         payload = json.dumps(cmd.model_dump(exclude_none=True))
-        if self._ws is None:
+        ws = self._ws
+        if ws is None:
             # mouth levels arrive ~15x/s while talking; keep them out of INFO logs
             (log.debug if cmd.action == "mouth" else log.info)("[MOCK ROBOT] %s", payload)
             return
         try:
-            await self._ws.send_text(payload)
+            await ws.send_text(payload)
         except Exception as e:  # socket died; keep the brain alive
             log.warning("robot send failed (%s); detaching", e)
-            self.detach()
+            self.detach(ws)
 
     async def face(self, state: Mood) -> None:
         await self.send(RobotCommand(action="face", state=state))
@@ -80,12 +86,28 @@ class Robot:
 
     # ---- composites ---------------------------------------------------
     async def point_at(self, box: list[int], hold_s: float = 4.0) -> None:
-        """Turn toward a Gemini box, laser on, hold, then laser off (head stays)."""
+        """Aim at a Gemini box and light it for `hold_s` (head stays there).
+
+        One laser message carrying the angles: the firmware turns the laser off,
+        moves, and only switches it on once the head has arrived. hold_s counts
+        from the send and includes the head's travel (<1 s for board-sized moves);
+        the firmware's own 6 s timeout is the safety net."""
         pan, tilt = self.calibration.box_to_angles(box)
-        await self.look(pan, tilt)
         await self.laser(True, pan, tilt)
         await asyncio.sleep(hold_s)
         await self.laser(False)
+
+    async def show(self, mood: Mood, box: list[int] | None = None, hold_s: float = 4.0) -> None:
+        """Everything the robot does for one verdict, as ONE ordered sequence.
+
+        Running react() and point_at() concurrently let the mood's head tilt
+        land after the laser had been aimed, and the firmware re-targets a
+        pending laser on any later look, so the dot could hit the wrong spot."""
+        if box is not None:
+            await self.face(mood)            # no mood head move: the laser decides where we look
+            await self.point_at(box, hold_s)
+        else:
+            await self.react(mood)
 
     async def react(self, mood: Mood) -> None:
         """Mood plus a small matching head move (A tunes the angles)."""

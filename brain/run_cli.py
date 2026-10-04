@@ -68,7 +68,7 @@ def check(brain: Brain, policy: Policy, flat: np.ndarray, context: dict | None =
     jpeg = encode_jpeg(enhance(flat), max_w=config.JPEG_MAX_W)
     analysis = brain.see(jpeg, context)
     vres = verify(analysis)
-    decision = policy.decide(analysis, vres)
+    decision = policy.decide(analysis, vres, on_demand=bool(context and context.get("on_demand")))
     return analysis, vres, decision
 
 
@@ -96,9 +96,9 @@ def report(a: BoardAnalysis, v: VerifierResult, d: Decision, model: str | None) 
 
 
 async def act(robot: Robot, d: Decision) -> None:
-    await robot.react(d.mood)
-    if d.speak and d.box is not None:
-        await robot.point_at(d.box, hold_s=0.2)
+    # The CLI never has a real ESP32 attached (commands print as [MOCK ROBOT]),
+    # so keep the laser hold short instead of freezing the preview for 4 s.
+    await robot.show(d.mood, d.box if d.speak else None, hold_s=0.2)
 
 
 def run_image(path: Path, brain: Brain, policy: Policy, robot: Robot) -> int:
@@ -147,7 +147,8 @@ def _window_key(view: np.ndarray) -> str | None:
 def run_camera(index: str, show: bool, brain: Brain, policy: Policy, robot: Robot) -> int:
     if show:
         quiet_qt_fonts()
-    det = SettleDetector(still_s=config.STILL_S, min_interval_s=config.MIN_CHECK_INTERVAL_S)
+    det = SettleDetector(still_s=config.STILL_S, min_interval_s=config.MIN_CHECK_INTERVAL_S,
+                             change_thr=config.CHANGE_THR)
     detect = config.BOARD_DETECT
     stuck_announced = False
     dark_warned = False

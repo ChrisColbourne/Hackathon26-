@@ -31,8 +31,10 @@ python -m brain.run_cli --image /tmp/board.jpg
 python -m brain.run_cli --camera --show
 # every check saves what Gemini saw to brain/recordings/<stamp>.jpg (+ .json once it answers)
 
-# the real server (ESP32 -> ws://LAPTOP:8000/ws/robot, app -> /ws/app)
+# the real server (ESP32 -> ws://LAPTOP:8000/robot or /ws/robot, app -> /ws/app)
 CAMERA_ENABLED=1 python -m brain.server
+python -m brain.server --show          # same + camera preview window (c = check now, b, q)
+python -m brain.tools.serial_bridge    # 2nd terminal, only if the robot is on USB instead of Wi-Fi
 curl -F image=@/tmp/board.jpg localhost:8000/check | python -m json.tool
 ```
 
@@ -57,9 +59,9 @@ curl -F image=@/tmp/board.jpg localhost:8000/check | python -m json.tool
 
 ## Tuning knobs (`.env`)
 
-`SPEAK_THRESHOLD=0.7` · `PRO_FALLBACK_BELOW=0.7` · `COOLDOWN_S=20` · `STILL_S=5` · `MIN_CHECK_INTERVAL_S=12` ·
+`SPEAK_THRESHOLD=0.7` · `PRO_FALLBACK_BELOW=0.7` · `COOLDOWN_S=20` · `STILL_S=5` · `MIN_CHECK_INTERVAL_S=5` ·
 `STUCK_AFTER_S=60` · `CAMERA_INDEX=auto` · `CAMERA_NAME=` · `CAMERA_ENABLED=1` · `BOARD_DETECT=1` · `FLASH_THINKING=low` ·
-`GEMINI_FLASH_MODEL=gemini-3.8-flash` · `GEMINI_ALT_MODELS=gemini-3.7-flash,gemini-3.6-flash` ·
+`GEMINI_FLASH_MODEL=gemini-3.8-flash` · `GEMINI_ALT_MODELS=gemini-3.7-flash,gemini-3.6-flash,gemini-3.5-flash` ·
 `GEMINI_API_KEYS=k1,k2` (rotates on 429) · `PREFER_CACHE=1` (serve `demo_cache/` first)
 
 ## Quota (read before testing)

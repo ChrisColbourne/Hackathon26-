@@ -13,3 +13,4 @@ sympy
 latex2sympy2
 elevenlabs
 pybind11            # only needed to build brain/vision (C++)
+pyserial            # brain.tools.serial_bridge: robot over USB instead of Wi-Fi

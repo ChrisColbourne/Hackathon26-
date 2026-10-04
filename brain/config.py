@@ -17,9 +17,10 @@ GEMINI_API_KEYS = [k.strip() for k in os.getenv("GEMINI_API_KEYS", os.getenv("GE
 # Gemini. Flash answers first; Pro is re-asked when Flash is unsure.
 FLASH_MODEL = os.getenv("GEMINI_FLASH_MODEL", "gemini-3.8-flash")
 # Fallbacks, in order. Measured on the free tier (Oct 3): each model has its own
-# daily quota (3.8-flash: 20 requests/day), 3.7/3.6-flash answer in ~2 s, and
+# daily quota (3.8-flash: 20 requests/day), 3.7/3.6-flash answer in ~2 s, 3.5-flash
+# kept answering when the newer ones were all overloaded (Oct 3), and
 # Pro has ZERO free requests, so Pro is opt-in for paid keys only.
-ALT_MODELS = [m.strip() for m in os.getenv("GEMINI_ALT_MODELS", "gemini-3.7-flash,gemini-3.6-flash").split(",") if m.strip()]
+ALT_MODELS = [m.strip() for m in os.getenv("GEMINI_ALT_MODELS", "gemini-3.7-flash,gemini-3.6-flash,gemini-3.5-flash").split(",") if m.strip()]
 PRO_MODEL = os.getenv("GEMINI_PRO_MODEL", "")           # e.g. gemini-3.1-pro-preview
 PRO_FALLBACK_BELOW = float(os.getenv("PRO_FALLBACK_BELOW", "0.7"))
 # Per-model deadline. Healthy answers take 4-17 s; a model that needs longer is
@@ -53,7 +54,11 @@ CAMERA_H = int(os.getenv("CAMERA_H", "1080"))
 # every pause while writing (12 checks in two minutes on the first live test).
 STILL_S = float(os.getenv("STILL_S", "5"))
 # ...and never more often than this. Quota guard; on-demand checks bypass it.
-MIN_CHECK_INTERVAL_S = float(os.getenv("MIN_CHECK_INTERVAL_S", "12"))
+MIN_CHECK_INTERVAL_S = float(os.getenv("MIN_CHECK_INTERVAL_S", "5"))
+# Fraction of pixels that must differ from the last checked board to re-check.
+# 0.0001 catches erasing a single character; raise it if lighting flicker
+# (projector, window) causes checks with nothing new on the board.
+CHANGE_THR = float(os.getenv("CHANGE_THR", "0.0001"))
 # Size of the flattened board image. Handwriting is small relative to the frame
 # (the first real capture had "1+1=2" ~150 px wide in a 1280 px frame), so keep
 # resolution: Gemini reads detail per 768-px tile and the extra tokens are cheap.

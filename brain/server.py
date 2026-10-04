@@ -61,6 +61,9 @@ class Brain:
         self.loop: asyncio.AbstractEventLoop | None = None
         self.voice = Voice(on_mouth=self._mouth_from_thread, on_state=self._state_from_thread)
         self.latest_flat: np.ndarray | None = None
+        self.latest_found = False                 # board rectangle detected in latest_flat
+        self.board_detect = config.BOARD_DETECT   # toggled live by the preview's `b` key
+        self.last_box: list[int] | None = None    # line the otter last flagged (preview overlay)
         self.check_requested = asyncio.Event()
         self.busy = asyncio.Lock()
         self.state: Mood = "idle"
@@ -105,8 +108,15 @@ class Brain:
                 return {"ok": False, "error": str(e)}
             self.session.consume_heard()
             vres = verify(analysis)
-            decision = self.policy.decide(analysis, vres)
+            decision = self.policy.decide(analysis, vres, on_demand=on_demand)
+            self.last_box = decision.box if decision.speak else None
             self.session.add_check(analysis, vres, decision, on_demand)
+            fe = analysis.first_error
+            log.info("CHECK #%d (%s, %s): %s | %s | otter %s",
+                     len(self.session.checks), "on demand" if on_demand else "auto", self.gemini.last_model,
+                     analysis.problem or "(no problem found)",
+                     f"line {fe.line} {fe.status.value}: {fe.latex}" if fe else "no mistake",
+                     f'SAYS "{decision.text}"' if decision.speak else f"quiet ({decision.reason})")
 
             await self.broadcast({"event": "analysis", **analysis.model_dump(mode="json"),
                                   "sympy": vres.line_ok, "veto": vres.veto_line,
@@ -114,11 +124,9 @@ class Brain:
             if decision.speak:
                 await self.broadcast(Nudge(text=decision.text, line=decision.line, kind=decision.kind,
                                            mood=decision.mood).model_dump(mode="json"))
-                tasks = [asyncio.to_thread(self.voice.speak, decision.text, decision.mood),
-                         self.robot.react(decision.mood)]
-                if decision.box is not None:
-                    tasks.append(self.robot.point_at(decision.box))
-                await asyncio.gather(*tasks)
+                # voice and robot in parallel, but the robot's own steps stay in order
+                await asyncio.gather(asyncio.to_thread(self.voice.speak, decision.text, decision.mood),
+                                     self.robot.show(decision.mood, decision.box))
             await self.set_state(decision.mood if decision.mood in ("happy", "confused") else "idle")
             return {"ok": True, "analysis": analysis.model_dump(mode="json"),
                     "decision": {"speak": decision.speak, "text": decision.text, "mood": decision.mood,
@@ -126,7 +134,8 @@ class Brain:
 
     # ---- camera loop ---------------------------------------------------------
     async def camera_loop(self) -> None:
-        det = SettleDetector(still_s=config.STILL_S, min_interval_s=config.MIN_CHECK_INTERVAL_S)
+        det = SettleDetector(still_s=config.STILL_S, min_interval_s=config.MIN_CHECK_INTERVAL_S,
+                             change_thr=config.CHANGE_THR)
         stuck_announced = False
         dark_warned = False
         try:
@@ -148,8 +157,8 @@ class Brain:
                                 "Not sending to Gemini.", cam_index)
                     await self.broadcast({"event": "error", "text": "camera frame is black"})
                 dark_warned = dark
-                flat, _found = await asyncio.to_thread(flatten, frame)
-                self.latest_flat = flat
+                flat, found = await asyncio.to_thread(flatten, frame, self.board_detect)
+                self.latest_flat, self.latest_found = flat, found
                 trigger = det.update(flat) and not dark
                 on_demand = self.check_requested.is_set() and not dark
 
@@ -238,6 +247,7 @@ async def check(image: UploadFile = File(...)) -> dict[str, Any]:
 
 
 @app.websocket("/ws/robot")
+@app.websocket("/robot")          # the firmware's default SERVER_PATH
 async def ws_robot(ws: WebSocket) -> None:
     await ws.accept()
     brain.robot.attach(ws)
@@ -249,13 +259,14 @@ async def ws_robot(ws: WebSocket) -> None:
             except json.JSONDecodeError:
                 log.warning("robot sent non-JSON: %r", raw)
                 continue
-            log.info("robot: %s", msg)
+            # every face/look gets a "done"; keep those out of the INFO log
+            (log.debug if msg.get("status") == "done" else log.info)("robot: %s", msg)
             brain.robot.on_status(msg)
             await brain.broadcast({"event": "robot", **msg})
     except WebSocketDisconnect:
         pass
     finally:
-        brain.robot.detach()
+        brain.robot.detach(ws)
 
 
 @app.websocket("/ws/app")
@@ -284,7 +295,75 @@ if _app_dir.is_dir():
     app.mount("/", StaticFiles(directory=_app_dir, html=True), name="app")
 
 
+def preview(server: Any) -> None:
+    """Camera preview + keys on the MAIN thread (Qt requires it) while uvicorn
+    serves from a background thread. c = check now, b = toggle board detection,
+    q / Esc / closing the window = stop the server."""
+    import threading
+
+    from .run_cli import WINDOW, _terminal_key, _window_key, quiet_qt_fonts
+
+    quiet_qt_fonts()
+    cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)       # resizable; the board image is 1600x900
+    cv2.resizeWindow(WINDOW, 1280, 720)
+    print("keys: c = check now, b = toggle board detection, q = quit. "
+          "Click the preview window first, or type the key + Enter here.")
+    waiting = np.full((360, 640, 3), 40, np.uint8)
+    cv2.putText(waiting, "waiting for the camera...", (140, 185), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (220, 220, 220), 2)
+    while not server.should_exit:
+        flat = brain.latest_flat
+        if flat is None:
+            view = waiting
+        else:
+            view = flat.copy()
+            h, w = view.shape[:2]
+            if brain.last_box:
+                y0, x0, y1, x1 = brain.last_box
+                cv2.rectangle(view, (x0 * w // 1000, y0 * h // 1000), (x1 * w // 1000, y1 * h // 1000), (0, 0, 255), 3)
+            status = (f"state={brain.state}  robot={'connected' if brain.robot.connected else 'NOT connected'}  "
+                      f"detect={'on' if brain.board_detect else 'off'} board={'yes' if brain.latest_found else 'no'}")
+            cv2.putText(view, status, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 128, 0), 2)
+            if brain.busy.locked():
+                cv2.putText(view, "checking...", (10, h - 20), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
+        key = _window_key(view) or _terminal_key()
+        if key == "q":
+            break
+        if key == "b":
+            brain.board_detect = not brain.board_detect
+            print(f"board detection {'on' if brain.board_detect else 'off'}")
+        if key == "c":
+            if brain.busy.locked():
+                print("a check is already running")
+            elif brain.loop is not None:
+                print("checking board now...")
+                brain.loop.call_soon_threadsafe(brain.check_requested.set)   # asyncio.Event: set it on its loop
+    server.should_exit = True
+    cv2.destroyAllWindows()
+    for t in threading.enumerate():
+        if t.name == "uvicorn":
+            t.join(timeout=5)
+
+
 if __name__ == "__main__":
+    import argparse
+    import threading
+
     import uvicorn
 
-    uvicorn.run("brain.server:app", host=config.HOST, port=config.PORT, reload=False)
+    p = argparse.ArgumentParser(description="Otter Tutor brain server")
+    p.add_argument("--show", action="store_true",
+                   help="camera preview window with c/b/q keys (turns the camera on)")
+    args = p.parse_args()
+    if args.show:
+        CAMERA_ENABLED = True                       # the preview needs the camera loop
+    # Serve THIS module's `app` (not the import string "brain.server:app"),
+    # so the preview and the endpoints share one Brain.
+    server = uvicorn.Server(uvicorn.Config(app, host=config.HOST, port=config.PORT))
+    if not args.show:
+        server.run()
+    else:
+        threading.Thread(target=server.run, name="uvicorn", daemon=True).start()
+        try:
+            preview(server)
+        except KeyboardInterrupt:
+            server.should_exit = True
