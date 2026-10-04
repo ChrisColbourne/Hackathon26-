@@ -9,10 +9,10 @@
 #define PAN_CENTER   90
 #define TILT_CENTER  90
 #define PAN_LIMIT    60     // max +/- degrees left/right
-#define TILT_MIN    -25     // lowest the head can look
+#define TILT_MIN    -40     // lowest the head can look (was -25: too high for the bottom of the board, Oct 4)
 #define TILT_MAX     15     // SAFETY: highest it can look, keep the laser below eye level
 #define PAN_INVERT   true   // flip if the head turns the wrong way (true since the pan servo was replaced, Oct 4)
-#define TILT_INVERT  false
+#define TILT_INVERT  true   // true since Oct 4: + was tilting down
 #define SERVO_SPEED  150.0f // max degrees per second
 
 // ---- Laser ----

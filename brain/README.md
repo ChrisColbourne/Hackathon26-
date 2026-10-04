@@ -33,7 +33,7 @@ python -m brain.run_cli --camera --show
 
 # the real server (ESP32 -> ws://LAPTOP:8000/robot or /ws/robot, app -> /ws/app)
 CAMERA_ENABLED=1 python -m brain.server
-python -m brain.server --show          # same + camera preview window (c = check now, t = talk, b, q)
+python -m brain.server --show          # same + camera preview window (c = check now, t = talk, p = pause auto-checks, b, q)
 python -m brain.tools.voice_test       # mic, speakers, ElevenLabs voice + transcription, one at a time
 python -m brain.tools.serial_bridge    # 2nd terminal, only if the robot is on USB instead of Wi-Fi
 curl -F image=@/tmp/board.jpg localhost:8000/check | python -m json.tool

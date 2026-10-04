@@ -29,7 +29,7 @@ from ..calibration import CORNER_ORDER, DEFAULT_PATH, Calibration, Corner
 from .robot_link import RobotLink
 
 NAMES = {"tl": "TOP-LEFT", "tr": "TOP-RIGHT", "br": "BOTTOM-RIGHT", "bl": "BOTTOM-LEFT"}
-PAN_LIMIT, TILT_MIN, TILT_MAX = 60, -25, 15     # same limits as the firmware's config.h
+PAN_LIMIT, TILT_MIN, TILT_MAX = 60, -40, 15     # same limits as the firmware's config.h
 STEPS = {"a": (-1, 0), "d": (1, 0), "w": (0, 1), "s": (0, -1), "A": (-5, 0), "D": (5, 0), "W": (0, 5), "S": (0, -5)}
 KEEPALIVE_S = 4.0                               # the firmware switches the laser off after 6 s without a command
 

@@ -68,6 +68,7 @@ class Brain:
         self.check_requested = asyncio.Event()
         self.busy = asyncio.Lock()
         self.talking = False                      # a voice turn (listen -> answer) is in progress
+        self.auto_paused = False                  # `p`: no automatic checks (no Gemini calls) until resumed
         self.state: Mood = "idle"
 
     # ---- fan-out to apps --------------------------------------------------
@@ -155,6 +156,17 @@ class Brain:
             if config.STUCK_PROMPT:
                 await asyncio.to_thread(self.voice.speak, config.STUCK_PROMPT, "thinking")
 
+    def set_auto_paused(self, paused: bool) -> None:
+        """`p` key / app pause|resume. Paused: no automatic checks and no stuck
+        prompts, so an empty board costs nothing; `c` and `t` still work. On
+        resume the board is checked once it settles, if it changed since the last check."""
+        if paused == self.auto_paused:
+            return
+        self.auto_paused = paused
+        log.info("automatic checks %s", "PAUSED (c and t still work)" if paused else "resumed")
+        if self.loop:
+            asyncio.run_coroutine_threadsafe(self.broadcast({"event": "auto", "paused": paused}), self.loop)
+
     # ---- talking with the student -------------------------------------------
     async def voice_turn(self) -> None:
         """`t` key / app `talk`: listen on the laptop mic until the student stops
@@ -223,10 +235,11 @@ class Brain:
                 dark_warned = dark
                 flat, found = await asyncio.to_thread(flatten, frame, self.board_detect)
                 self.latest_flat, self.latest_found = flat, found
-                trigger = det.update(flat) and not dark
+                trigger = det.update(flat, armed=not self.auto_paused) and not dark
                 on_demand = self.check_requested.is_set() and not dark
 
                 if (det.idle_seconds() > config.STUCK_AFTER_S and not stuck_announced and not self.talking
+                        and not self.auto_paused
                         and self.state in ("idle", "listening", "confused") and not self.busy.locked()):
                     stuck_announced = True
                     await self.stuck()
@@ -248,6 +261,8 @@ class Brain:
                 self.check_requested.set()
             else:
                 await self.broadcast({"event": "error", "text": "no camera frame; POST /check with an image"})
+        elif cmd in ("pause", "resume"):   # same as the `p` key
+            self.set_auto_paused(cmd == "pause")
         elif cmd == "talk":         # same as the `t` key: listen on the laptop mic
             asyncio.create_task(self.voice_turn())
         elif cmd == "student_said":  # typed instead of spoken
@@ -312,6 +327,7 @@ async def health() -> dict[str, Any]:
             "apps": len(brain.apps), "checks": len(brain.session.checks), "gemini_calls": brain.gemini.calls,
             "vision": BACKEND, "camera": CAMERA_ENABLED, "voice_live": brain.voice.live,
             "mic": brain.voice.mic.description if brain.voice.mic else None, "state": brain.state,
+            "auto_paused": brain.auto_paused,
             "mock": config.GEMINI_MOCK}
 
 
@@ -377,7 +393,8 @@ if _app_dir.is_dir():
 def preview(server: Any) -> None:
     """Camera preview + keys on the MAIN thread (Qt requires it) while uvicorn
     serves from a background thread. c = check now, t = talk to the otter,
-    b = toggle board detection, q / Esc / closing the window = stop the server."""
+    p = pause/resume automatic checks, b = toggle board detection,
+    q / Esc / closing the window = stop the server."""
     import threading
 
     from .run_cli import WINDOW, _terminal_key, _window_key, quiet_qt_fonts
@@ -385,7 +402,8 @@ def preview(server: Any) -> None:
     quiet_qt_fonts()
     cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)       # resizable; the board image is 1600x900
     cv2.resizeWindow(WINDOW, 1280, 720)
-    print("keys: c = check now, t = talk (tap, then speak), b = toggle board detection, q = quit. "
+    print("keys: c = check now, t = talk (tap, then speak), p = pause/resume automatic checks, "
+          "b = toggle board detection, q = quit. "
           "Click the preview window first, or type the key + Enter here.")
     waiting = np.full((360, 640, 3), 40, np.uint8)
     cv2.putText(waiting, "waiting for the camera...", (140, 185), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (220, 220, 220), 2)
@@ -402,6 +420,9 @@ def preview(server: Any) -> None:
             status = (f"state={brain.state}  robot={'connected' if brain.robot.connected else 'NOT connected'}  "
                       f"detect={'on' if brain.board_detect else 'off'} board={'yes' if brain.latest_found else 'no'}")
             cv2.putText(view, status, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 128, 0), 2)
+            if brain.auto_paused:
+                cv2.putText(view, "AUTO-CHECK PAUSED  (p = resume, c = check now)", (10, 70),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
             if brain.voice.listening:
                 cv2.putText(view, "LISTENING... (speak, or tap t to stop)", (10, h - 20),
                             cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 120, 0), 2)
@@ -410,6 +431,10 @@ def preview(server: Any) -> None:
         key = _window_key(view) or _terminal_key()
         if key == "q":
             break
+        if key == "p":
+            brain.set_auto_paused(not brain.auto_paused)
+            print("automatic checks PAUSED: no Gemini calls until you press p again (c and t still work)"
+                  if brain.auto_paused else "automatic checks resumed")
         if key == "b":
             brain.board_detect = not brain.board_detect
             print(f"board detection {'on' if brain.board_detect else 'off'}")
