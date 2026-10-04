@@ -29,4 +29,4 @@ Commands: `{"action":"face","state":"happy"}` · `{"action":"mouth","level":0.6}
 Angles are degrees from centre: pan + = right, tilt + = up (limits in `config.h`).
 A `look` always switches the laser off; use `laser` with `pan`/`tilt` to aim and fire.
 Tuning (servo centres, limits, direction, speed, laser timeout) lives in `otter_robot/config.h`.
-Screen upside down? Change `setRotation(1)` to `3` in `otter.cpp`.
+The LCD is mounted vertically (portrait, 240x320). Otter upside down? Set `SCREEN_ROTATION` to `2` in `config.h`.
