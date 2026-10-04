@@ -26,13 +26,14 @@ def _derivative_cases(n: int) -> dict[str, BoardAnalysis]:
     l1 = Step(line=1, latex=problem, status="ok", box=[120, 80, 220, 700])
     wrong = Step(line=2, latex=rf"\frac{{{n}x^{n - 1} \sin x - x^{n} \cos x}}{{\sin^2 x}}", status="wrong_rule",
                  rule_used="quotient_rule", rule_expected="product_rule", box=[260, 80, 380, 900],
-                 note="Quotient rule applied to a product.")
+                 note="Quotient rule applied to a product.", action="took the derivative")
     right = Step(line=2, latex=rf"{n}x^{n - 1} \sin x + x^{n} \cos x", status="ok", box=[260, 80, 380, 900])
     return {
         "wrong_rule": BoardAnalysis(
             board_text=f"d/dx [x^{n} sin x] = ({n}x^{n - 1} sin x - x^{n} cos x) / sin^2 x", problem=problem,
             topic="derivative", board_complete=True, steps=[l1, wrong], first_error_line=2, confidence=0.93,
-            nudge="Hmm, take another look at which rule fits line 2.", mood="confused"),
+            nudge="Hmm, look again at which rule you picked to take the derivative on line 2.",
+            hint="Look at how the two parts of the function are joined on line 2.", mood="confused"),
         "correct": BoardAnalysis(
             board_text=f"d/dx [x^{n} sin x] = {n}x^{n - 1} sin x + x^{n} cos x", problem=problem,
             topic="derivative", board_complete=True, steps=[l1, right], first_error_line=None, confidence=0.97,
@@ -47,9 +48,11 @@ def _algebra_case(n: int) -> BoardAnalysis:
         topic="algebra", board_complete=True,
         steps=[Step(line=1, latex=f"2x + 3 = {rhs}", status="ok", box=[100, 80, 200, 600]),
                Step(line=2, latex=f"2x = {rhs + 3}", status="arithmetic", box=[240, 80, 340, 600],
+                    action="moved the 3 across",
                     note="Added 3 instead of subtracting when moving it across."),
                Step(line=3, latex=f"x = {(rhs + 3) / 2:g}", status="ok", box=[380, 80, 480, 600])],
-        first_error_line=2, confidence=0.9, nudge="Something in the arithmetic on line 2 doesn't add up.",
+        first_error_line=2, confidence=0.9, nudge="Check how you moved that term across on line 2.",
+        hint="Look at what happened to the sign of the 3 when it crossed over on line 2.",
         mood="confused")
 
 
@@ -73,6 +76,8 @@ class MockBrain:
         round_no = self.calls // len(ORDER)
         n = 2 + round_no
         a = _algebra_case(round_no) if name == "arithmetic" else _derivative_cases(n)[name]
+        if said := (context or {}).get("student_said"):   # exercises the spoken-reply path without Gemini
+            a.reply = f"I heard you say: {said}. Let's look at your board together."
         self.calls += 1
         self.last_raw = a.model_dump_json()
         log.info("mock verdict #%d: %s (conf %.2f)", self.calls, name, a.confidence)

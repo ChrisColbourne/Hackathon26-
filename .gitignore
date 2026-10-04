@@ -6,6 +6,7 @@ __pycache__/
 *.so
 brain/vision/build/
 brain/recordings/
+brain/tts_cache/
 brain/calibration.json
 
 # firmware: per-machine Wi-Fi + server settings (copy secrets.example.h), backups, PlatformIO builds
