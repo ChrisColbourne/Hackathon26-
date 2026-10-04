@@ -3,6 +3,7 @@
 // Test without a server: type a JSON command in the serial monitor.
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <ArduinoOTA.h>
 #include "config.h"
 #include "otter.h"
 #include "motion.h"
@@ -55,19 +56,36 @@ static void handle(const char* json, size_t len) {
 
 static void onLost() { laser::set(false); laserAfterMove = false; otter::setMood("idle"); motion::home(); }
 
+static void beginOta() {
+  ArduinoOTA.setHostname(OTA_HOSTNAME);
+#ifdef OTA_PASS
+  ArduinoOTA.setPassword(OTA_PASS);
+#endif
+  ArduinoOTA.onStart([]() {           // SAFETY: laser off and head still while flashing
+    laser::set(false); laserAfterMove = false; otter::setMood("thinking"); otter::update();
+    Serial.println("[ota] update starting");
+  });
+  ArduinoOTA.onEnd([]() { Serial.println("[ota] done, rebooting"); });
+  ArduinoOTA.onError([](ota_error_t e) { Serial.printf("[ota] error %u\n", e); });
+  ArduinoOTA.begin();
+  Serial.printf("[ota] ready: %s.local\n", OTA_HOSTNAME);
+}
+
 void setup() {
+  laser::begin();                     // FIRST: on an active-low robot a floating pin can light the laser
   Serial.begin(115200);
   delay(200);
   Serial.println("\n[otter] booting");
-  laser::begin();
   otter::begin();
   motion::begin();
   motion::home();
   net::begin(handle, onLost);
+  beginOta();
   Serial.println("[otter] ready. Type JSON here to test, e.g. {\"action\":\"face\",\"state\":\"happy\"}");
 }
 
 void loop() {
+  ArduinoOTA.handle();
   net::loop();
   if (motion::update() && pending[0]) {
     if (laserAfterMove) { laser::set(true); laserAfterMove = false; }
