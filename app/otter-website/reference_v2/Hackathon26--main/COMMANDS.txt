@@ -1,0 +1,195 @@
+OTTER TUTOR - COMMAND CHEAT SHEET
+=================================
+
+Run everything from the project folder, inside the virtual environment.
+The folder name has an apostrophe in it, so keep the quotes:
+
+    cd ~/Desktop/"Hackathon26'"
+    source .venv/bin/activate
+
+ONE THING AT A TIME: brain.server, face_test, robot_test, calibrate_laser and
+test_server.py all use port 8000. Stop one (q or Ctrl+C) before starting another.
+
+
+1. RUN THE OTTER
+----------------
+    python -m brain.server --show
+        The full program: webcam + preview window, Gemini, voice, robot.
+        Keys (click the preview window first, or type the key + Enter in the terminal):
+            c = check the board now
+            t = talk to the otter (tap, ask out loud, it stops when you go quiet; tap t again to stop early)
+            b = toggle whiteboard detection on/off
+            q = quit
+        At startup look for:  "waiting for the robot at ws://10.72.180.48:8000/robot"
+        then within a few seconds:  "robot attached"  and  "robot: {'status': 'ready'}"
+
+    CAMERA_ENABLED=1 python -m brain.server
+        Same, without the preview window.
+
+    GEMINI_MOCK=1 python -m brain.server --show
+        Canned answers, no Gemini calls. Use it to test the robot/voice/app without spending quota
+        (free tier = about 20 Gemini requests a day on gemini-3.8-flash).
+
+
+2. TEST EACH FEATURE
+--------------------
+Face (the six expressions on the LCD)                     [stop brain.server first]
+    python -m brain.tools.face_test                 all six, 6 s each
+    python -m brain.tools.face_test happy           just one, until Ctrl+C
+    python -m brain.tools.face_test --hold 10       all six, 10 s each
+        idle, listening, thinking, talking, happy, confused
+
+Voice (laptop mic + speakers + ElevenLabs)                [no robot or Gemini needed]
+    python -m brain.tools.voice_test
+        Shows which mic is used (never the webcam's), records you, beeps the speakers,
+        transcribes what you said and the otter says it back.
+
+Servos + laser (wiring/direction check)                   [stop brain.server first]
+    python -m brain.tools.robot_test
+        Moves the head left/right/up/down and switches the laser on/off, asks what you saw,
+        then tells you what to fix (wiring, or a flag in otter_robot/config.h).
+
+Laser calibration (aim at the board's four corners)       [stop brain.server first]
+    python -m brain.tools.calibrate_laser
+        a/d = left/right, w/s = up/down (1 deg; capital A D W S = 5 deg)
+        Enter = corner done, q = quit without saving.
+        Saves brain/calibration.json. Redo it whenever the robot or the board moves,
+        then restart brain.server.
+
+Gemini on a photo instead of the webcam (uses 1 Gemini request)
+    python -m brain.tools.make_test_board /tmp/board.jpg --case quotient     (cases: quotient, correct, sign, algebra)
+    python -m brain.run_cli --image /tmp/board.jpg
+
+Dev loop without the server
+    python -m brain.run_cli --camera --show          live webcam, real Gemini
+    python -m brain.run_cli --camera --show --mock   live webcam, canned answers
+
+While brain.server is running (second terminal)
+    curl localhost:8000/health                                    robot connected? voice on? which mic?
+    curl -F image=@/tmp/board.jpg localhost:8000/check            run a check on a photo
+
+Demo cache (replay a good recording if Gemini is down)
+    python -m brain.tools.cache_add --list
+    python -m brain.tools.cache_add 143022_117 --name quotient_mistake
+
+
+3. ESP32 FIRMWARE
+-----------------
+Flash new firmware over Wi-Fi (laptop and robot both on the hotspot, nothing to unplug)
+    ./otter-robot-arduino/flash.sh ota
+    ./otter-robot-arduino/flash.sh ota 10.72.180.209          if otter-robot.local isn't found
+
+Flash over USB (first time, or if Wi-Fi flashing fails)    UNPLUG THE VIN WIRE FIRST
+    ./otter-robot-arduino/flash.sh
+
+Watch the ESP32's own log over USB (Ctrl+C to exit; opening it restarts the ESP32)
+    ~/.local/bin/arduino-cli monitor -p /dev/ttyUSB0 --config 115200
+        You can type JSON commands there too, e.g.  {"action":"face","state":"happy"}
+
+Tiny manual test server (type commands to the robot)       [stop brain.server first]
+    python otter-robot-arduino/test_server.py
+        then type: happy, think, talk, confused, listen, idle, look -20 10, laser -15 -5, off, home
+
+Unplugging/replugging the ESP32's power needs NO command: it keeps its firmware,
+rejoins the hotspot and reconnects to brain.server by itself.
+
+
+4. ROBOT OVER USB INSTEAD OF WI-FI
+----------------------------------
+    ls /dev/ttyUSB*                          is the ESP32 plugged in? (usually /dev/ttyUSB0)
+    sudo chmod a+rw /dev/ttyUSB0             allow access to the port (needed again after every replug/reboot)
+    sudo usermod -aG dialout $USER           permanent fix instead (log out and back in once)
+
+    python -m brain.server --show            terminal 1
+    python -m brain.tools.serial_bridge      terminal 2: passes the brain's commands to the ESP32 over USB
+
+
+5. NETWORK (PHONE HOTSPOT)
+--------------------------
+The ESP32 only works on the phone hotspot (eduroam blocks it). The laptop must be on the
+hotspot too, at 10.72.180.48 (the address in otter-robot-arduino/otter_robot/secrets.h).
+
+    nmcli -t -f NAME,DEVICE connection show --active      which Wi-Fi is the laptop on?
+    nmcli connection up "Auto Universel"                  switch the laptop to the hotspot
+    hostname -I                                           laptop's IP (must be 10.72.180.48)
+    ping 10.72.180.209                                    is the robot on the hotspot? (Ctrl+C to stop)
+
+If the laptop's IP is ever different: update SERVER_HOST in secrets.h and flash
+(./otter-robot-arduino/flash.sh ota works, since both are still on the hotspot).
+
+Devices
+    pactl list short sources                     microphones
+    cat /sys/class/video4linux/video*/name       cameras (the USB one is "WEB CAM")
+
+
+6. GITHUB
+---------
+Repo: https://github.com/ChrisColbourne/Hackathon26-
+Never commit .env or secrets.h (both are already in .gitignore).
+
+See what's going on
+    git status                      changed files, current branch
+    git branch -a                   all branches (local + GitHub)
+    git log --oneline -10           last 10 commits
+
+Get the latest
+    git fetch origin                see what's new on GitHub
+    git pull                        bring the current branch up to date
+
+Switch branch / make a new one
+    git switch elevenlabs
+    git switch -c my-new-branch
+    git push -u origin my-new-branch          put the new branch on GitHub
+
+Save and upload your work
+    git add -A
+    git commit -m "Describe what changed"
+    git push
+
+Merge a branch into main (example: elevenlabs)
+    Option A, on the website (lets someone review it first):
+        https://github.com/ChrisColbourne/Hackathon26-/compare/main...elevenlabs
+        -> Create pull request -> Merge pull request
+    Option B, from the terminal:
+        git switch main
+        git pull
+        git merge --no-ff elevenlabs
+        git push
+        git switch elevenlabs
+
+Bring main's newest changes into your branch
+    git switch elevenlabs
+    git merge main
+
+Throw away uncommitted changes to one file (can't be undone)
+    git restore path/to/file
+
+
+7. FIRST-TIME SETUP (new laptop)
+--------------------------------
+    sudo apt install python3.12-venv libopencv-dev cmake g++
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install -r brain/requirements.txt
+    cp .env.example .env              then put GEMINI_API_KEY and ELEVENLABS_API_KEY in .env
+    brain/vision/build.sh             builds the C++ vision module (optional; Python fallback otherwise)
+
+
+8. QUICK FIXES
+--------------
+"NO ROBOT CONNECTED" / log shows [MOCK ROBOT]
+    -> the laptop is not on the hotspot (section 5), or the ESP32 has no power. Restart brain.server after fixing.
+Face never changes
+    -> same as above: the robot isn't connected.
+Gemini "503 high demand"
+    -> Google's servers are busy; the brain falls back to the other models by itself. Just wait.
+Gemini "429" / quota
+    -> daily free quota used up. Add more keys in .env:  GEMINI_API_KEYS=key1,key2
+Otter can't hear you
+    -> run the voice test (section 2). Speak closer to the laptop; the webcam mic is never used.
+Laser points at the wrong place
+    -> run the laser calibration (section 2).
+Camera black / wrong camera
+    -> open the webcam's privacy shutter; the USB webcam is picked automatically ("WEB CAM").
+"Permission denied: /dev/ttyUSB0"
+    -> sudo chmod a+rw /dev/ttyUSB0

@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Otter Tutor · It sees your mistake. It won't tell you the answer.</title>
+  <meta name="description" content="A desk robot that watches you solve calculus on a whiteboard, points a laser at the line where it went wrong, and lets you fix it yourself. Built at StormHacks 2026.">
+  <meta name="theme-color" content="#E2E3E5">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=JetBrains+Mono:wght@400;500;700&family=Kalam:wght@700&display=swap">
+  <link rel="stylesheet" href="styles.css">
+  <script>document.documentElement.classList.add("js-reveal");</script>
+  <script src="otter.js" defer></script>
+  <script src="main.js" defer></script>
+  <script src="demo.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <!-- Reusable hand-drawn red-pen circle. Each use clones it with <use>. -->
+  <svg width="0" height="0" class="sr-only" aria-hidden="true" focusable="false">
+    <symbol id="pen-circle" viewBox="0 0 200 80" preserveAspectRatio="none">
+      <path pathLength="1" d="M118 9 C 66 2, 14 12, 8 38 C 3 62, 58 75, 112 72 C 160 69, 196 56, 193 34 C 190 12, 140 4, 84 10 C 66 12, 52 16, 44 20"
+            fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+    </symbol>
+  </svg>
+
+  <div class="page">
+    <header class="site-header tile">
+      <a class="wordmark-sm" href="#top">Otter Tutor</a>
+      <nav aria-label="Sections">
+        <ul class="nav-list">
+          <li><a href="#robot">Robot</a></li>
+          <li><a href="#circuit">Circuit</a></li>
+          <li><a href="#problem">Problem</a></li>
+          <li><a href="#demo">Demo</a></li>
+          <li><a href="#how">How it decides</a></li>
+          <li><a href="#setup">Setup</a></li>
+          <li><a href="#build">Build</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <main id="main">
+
+      <!-- 0–5 s · HERO ============================================== -->
+      <section id="top" class="grid" aria-labelledby="nameplate">
+        <div class="tile span-12 spec-line ticks-bottom">
+          <span class="mono">Desk robot / Calculus / StormHacks 2026</span>
+          <span class="mono muted">SFU Burnaby · Oct 3–4</span>
+        </div>
+
+        <div class="tile span-12 nameplate-tile grid-paper">
+          <h1 id="nameplate" class="nameplate" data-fit>Otter Tutor</h1>
+        </div>
+
+        <div class="tile span-7 hero-copy">
+          <div class="bg-math" aria-hidden="true">
+            <span class="bm bm-hero-1">d/dx [x² sin x]</span>
+            <span class="bm bm-hero-2">= 2x sin x + x² cos x</span>
+          </div>
+          <p class="headline">It sees your mistake. It won't tell you the answer.</p>
+          <p class="sub">A desk robot that watches you solve calculus on a whiteboard, points a laser at the line where it went wrong, and lets you fix it yourself.</p>
+          <div class="btn-row">
+            <a class="btn btn-laser" href="#demo">Try the demo</a>
+            <a class="btn btn-ghost" href="#robot">Watch it move</a>
+          </div>
+        </div>
+
+        <div class="tile span-5 panel hero-otter">
+          <div class="panel-label mono">Otter screen · 240×320, portrait</div>
+          <div class="otter-stage">
+            <div class="otter-frame">
+              <canvas id="hero-otter" class="otter-canvas" width="240" height="320"
+                      role="img" aria-label="The otter's face on its 2.8 inch screen"></canvas>
+            </div>
+            <p class="bubble" id="hero-bubble">Hmm, take another look at which rule you picked when you took the derivative on line 2.</p>
+          </div>
+        </div>
+
+        <div class="tile span-12 board grid-paper hero-board" aria-label="Whiteboard: line 2 is flagged">
+          <div class="board-line">
+            <span class="line-no mono" aria-hidden="true">1</span>
+            <span class="hand"><span class="hl">d/dx [x² sin x] =</span></span>
+          </div>
+          <div class="board-line">
+            <span class="line-no mono" aria-hidden="true">2</span>
+            <span class="hand circled" id="hero-term">
+              <span id="hero-wrong"><span class="frac"><span>2x sin x − x² cos x</span><span>sin² x</span></span></span>
+              <span id="hero-fixed" hidden>2x sin x + x² cos x</span>
+              <svg class="pen-circle" id="hero-circle" aria-hidden="true"><use href="#pen-circle"/></svg>
+              <span class="laser-dot" id="hero-laser" aria-hidden="true"></span>
+            </span>
+            <span class="flag mono" id="hero-flag">Line 2 · wrong_rule · first nudge</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5–15 s · 360° ROBOT ======================================= -->
+      <section id="robot" class="grid" aria-labelledby="robot-title">
+        <div class="tile span-12 section-head">
+          <span class="mono muted">01 / Hardware</span>
+          <h2 id="robot-title">Real hardware. Built overnight.</h2>
+        </div>
+
+        <figure class="tile span-7 panel video-tile pair">
+          <div class="viewport">
+            <span class="corner c-tl" aria-hidden="true"></span><span class="corner c-tr" aria-hidden="true"></span>
+            <span class="corner c-bl" aria-hidden="true"></span><span class="corner c-br" aria-hidden="true"></span>
+            <video class="robot-video" autoplay muted loop playsinline preload="metadata"
+                   poster="assets/video/robot_360-poster.webp" width="640" height="640"
+                   aria-label="360 degree turntable of the Otter Tutor model: an orange printed body with a screen, clipped onto a black webcam, with a yellow pan and tilt arm holding the laser.">
+              <source src="assets/video/robot_360.webm" type="video/webm">
+              <source src="assets/video/robot_360.mp4" type="video/mp4">
+              <img src="assets/video/robot_360.gif" alt="360 degree turntable of the Otter Tutor model." width="640" height="640" loading="lazy">
+            </video>
+          </div>
+          <figcaption>
+            <span class="mono muted-dark">Fig. 1 · The CAD, 360° turntable</span>
+            Two servos, one laser, seven printed parts. The arm pans and tilts to land on any line of the board.
+          </figcaption>
+        </figure>
+
+        <figure class="tile span-5 panel photo-tile lift">
+          <div class="viewport photo-viewport">
+            <span class="corner c-tl" aria-hidden="true"></span><span class="corner c-tr" aria-hidden="true"></span>
+            <span class="corner c-bl" aria-hidden="true"></span><span class="corner c-br" aria-hidden="true"></span>
+            <img class="ph" src="assets/photos/final-front-tripod.jpg" width="739" height="1600" loading="lazy" style="object-position: 50% 27%"
+                 alt="The finished yellow Otter Tutor robot seen from the front, clipped onto a webcam on a tripod, with the otter's face on its screen and the laser arm on the right."
+                 data-lightbox data-caption="The real one: printed in yellow, clipped onto the webcam on a tripod.">
+          </div>
+          <figcaption>
+            <span class="mono muted-dark">Fig. 2 · Photo, the real one</span>
+            Printed in yellow, otter on the screen, laser arm on the right, clipped onto the 2K webcam.
+          </figcaption>
+        </figure>
+
+        <div class="tile span-7 spec-tile">
+          <h3 class="mono tile-label">Spec sheet</h3>
+          <table class="spec-table">
+            <caption class="sr-only">Otter Tutor hardware specifications</caption>
+            <tbody>
+              <tr><th scope="row">Display</th><td>2.8" ILI9341 · 240×320, portrait</td></tr>
+              <tr><th scope="row">Moods</th><td>6: idle, listening, thinking, talking, happy, confused</td></tr>
+              <tr><th scope="row">Arm</th><td>2× SG90 · pan ±60°, tilt −25° to +15°, eased at up to 150°/s</td></tr>
+              <tr><th scope="row">Pointer</th><td>Red laser. Aims first, then lights for 4 s. The firmware cuts it at 6 s.</td></tr>
+              <tr><th scope="row">Eyes</th><td>2K USB webcam, read at 1920×1080</td></tr>
+              <tr><th scope="row">Ears</th><td>The laptop's own mic, tap to talk. Never the webcam mic.</td></tr>
+              <tr><th scope="row">Voice</th><td>ElevenLabs on the laptop speakers, lip-synced on the screen</td></tr>
+              <tr><th scope="row">Brain</th><td>Laptop (Python, FastAPI). The ESP32 joins it over a Wi-Fi WebSocket.</td></tr>
+              <tr><th scope="row">If the link drops</th><td>Laser off, head back to center, face to idle</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tile span-5 hatch-tile">
+          <div class="hatch-label">
+            <span class="big-num">7</span>
+            <span>printed parts that clip onto the webcam</span>
+          </div>
+        </div>
+
+      </section>
+
+
+      <!-- CIRCUIT ===================================================== -->
+      <section id="circuit" class="grid" aria-labelledby="circuit-title">
+        <div class="tile span-12 section-head">
+          <span class="mono muted">02 / Circuit</span>
+          <h2 id="circuit-title">How it's wired.</h2>
+          <p class="section-sub">One ESP32 runs everything on the robot: two servos, the laser and the screen. Point at a number to see its pins.</p>
+        </div>
+
+        <figure class="tile span-8 circuit-tile">
+          <h3 class="mono tile-label">Fig. 3 · Wiring diagram</h3>
+          <div class="circuit-map">
+            <img src="assets/photos/circuit-diagram.jpg" width="1367" height="720" loading="lazy"
+                 alt="Wiring diagram: an ESP32 DevKit on a breadboard wired to a pan servo, a tilt servo, a KY-008 laser module switched through an NPN transistor with a 1 kilo-ohm resistor, a 470 microfarad capacitor, and a 2.8 inch ILI9341 screen."
+                 data-lightbox data-caption="Wiring diagram: ESP32, pan and tilt servos, KY-008 laser with NPN and 1 kΩ, 470 µF capacitor, 2.8 inch screen.">
+            <button type="button" class="hotspot" style="--x:35%; --y:66%; --n:0" data-part="esp32" aria-label="1: ESP32">1</button>
+            <button type="button" class="hotspot" style="--x:25%; --y:24%; --n:1" data-part="pan" aria-label="2: pan servo">2</button>
+            <button type="button" class="hotspot" style="--x:9.5%; --y:32%; --n:2" data-part="tilt" aria-label="3: tilt servo">3</button>
+            <button type="button" class="hotspot" style="--x:46%; --y:21%; --n:3" data-part="laser" aria-label="4: laser, NPN transistor and 1 kilo-ohm resistor">4</button>
+            <button type="button" class="hotspot" style="--x:77%; --y:66%; --n:4" data-part="screen" aria-label="5: screen">5</button>
+            <button type="button" class="hotspot" style="--x:52.5%; --y:64%; --n:5" data-part="cap" aria-label="6: 470 microfarad capacitor">6</button>
+          </div>
+        </figure>
+
+        <figure class="tile span-4 panel photo-tile lift">
+          <div class="viewport photo-viewport">
+            <span class="corner c-tl" aria-hidden="true"></span><span class="corner c-tr" aria-hidden="true"></span>
+            <span class="corner c-bl" aria-hidden="true"></span><span class="corner c-br" aria-hidden="true"></span>
+            <img class="ph" src="assets/photos/final-back-wiring.jpg" width="1200" height="1600" loading="lazy" style="object-position: 60% 45%"
+                 alt="The back of the robot opened up: the ESP32 on a small breadboard inside the yellow case, with jumper wires running to the servos and the laser arm."
+                 data-lightbox data-caption="The same circuit, packed into the case.">
+          </div>
+          <figcaption>
+            <span class="mono muted-dark">Fig. 4 · Photo, inside the case</span>
+            The same circuit, packed into the case.
+          </figcaption>
+        </figure>
+
+        <div class="tile span-12 pins-tile">
+          <h3 class="mono tile-label">Pin map, from our firmware</h3>
+          <div class="pin-wrap">
+            <table class="pin-table">
+              <caption class="sr-only">Which ESP32 pin each part uses</caption>
+              <thead><tr><th scope="col">#</th><th scope="col">Part</th><th scope="col">ESP32 pin</th><th scope="col">What it does</th></tr></thead>
+              <tbody>
+                <tr data-part="esp32"><td>1</td><td>ESP32 DevKit</td><td>—</td><td>Runs the face, servos and laser. Joins the laptop over Wi-Fi.</td></tr>
+                <tr data-part="pan"><td>2</td><td>Pan servo (SG90)</td><td>GPIO 25</td><td>Turns the head ±60° left and right.</td></tr>
+                <tr data-part="tilt"><td>3</td><td>Tilt servo (SG90)</td><td>GPIO 26</td><td>Tilts from −25° to +15°, so the laser stays below eye level.</td></tr>
+                <tr data-part="laser"><td>4</td><td>Laser (KY-008), NPN, 1 kΩ</td><td>GPIO 27</td><td>The pointer. The firmware turns it off after 6 s.</td></tr>
+                <tr data-part="screen"><td>5</td><td>2.8" ILI9341 screen</td><td>MOSI 23 · SCLK 18 · MISO 19 · CS 5 · DC 16 · RST 17</td><td>The otter's face, over SPI, portrait 240×320.</td></tr>
+                <tr data-part="cap"><td>6</td><td>470 µF capacitor</td><td>Power rail</td><td>Sits across the breadboard's power rail.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="mono muted pin-note">The diagram shows the transistor version from our wiring guide. On the final robot the laser runs straight from GPIO 27, active-low.</p>
+        </div>
+      </section>
+
+      <!-- 15–25 s · THE 1 A.M. PROBLEM ============================== -->
+      <section id="problem" class="grid" aria-labelledby="problem-title">
+        <div class="tile span-12 section-head grid-paper">
+          <div class="bg-math" aria-hidden="true">
+            <span class="bm bm-prob-1">∫ 2x cos(x²) dx</span>
+            <span class="bm bm-prob-2">u = x²</span>
+          </div>
+          <span class="mono muted">03 / The problem</span>
+          <h2 id="problem-title">It's 1 a.m. <span class="circled">Line 3<svg class="pen-circle" aria-hidden="true"><use href="#pen-circle"/></svg></span> is wrong. You can't see why.</h2>
+        </div>
+
+        <div class="tile span-7 prose">
+          <p>So you snap a photo, an app hands you the full solution, and you copy it down. It feels like progress. Then the quiz shows up, and there's no app on the quiz.</p>
+        </div>
+        <div class="tile span-5 panel kicker-tile">
+          <p class="kicker">Getting the answer isn't the same as finding it.</p>
+        </div>
+
+        <div class="tile span-4 cat-tile">
+          <h3>Photo solvers</h3>
+          <p>Answer in two seconds. Learning in zero.</p>
+        </div>
+        <div class="tile span-4 cat-tile">
+          <h3>Chatbots</h3>
+          <p>Ask for a hint, get the whole solution.</p>
+        </div>
+        <div class="tile span-4 cat-tile">
+          <h3>Answer keys</h3>
+          <p>They tell you <em>that</em> it's wrong, not <em>where</em>.</p>
+        </div>
+      </section>
+
+      <!-- 25–40 s · YOUR TURN (DEMO) ================================ -->
+      <section id="demo" class="grid" aria-labelledby="demo-title">
+        <div class="tile span-12 section-head">
+          <span class="mono muted">04 / Demo</span>
+          <h2 id="demo-title">Your turn. Pick a line 2.</h2>
+          <p class="section-sub">Find d/dx [x² · sin x]. Choose what you'd write next.</p>
+        </div>
+
+        <div class="tile span-7 board grid-paper demo-board" id="demo-board">
+          <div class="board-line">
+            <span class="line-no mono" aria-hidden="true">1</span>
+            <span class="hand"><span class="hl">d/dx [x² · sin x] =</span></span>
+          </div>
+          <div class="board-line" id="demo-line-2">
+            <span class="line-no mono" aria-hidden="true">2</span>
+            <span class="ghost-line mono" id="demo-ghost">your line 2 appears here</span>
+            <span class="hand circled" id="demo-term" hidden>
+              <span id="demo-written"></span>
+              <svg class="pen-circle is-hidden" id="demo-circle" aria-hidden="true"><use href="#pen-circle"/></svg>
+              <span class="laser-dot is-hidden" id="demo-laser" aria-hidden="true"></span>
+            </span>
+          </div>
+        </div>
+
+        <div class="tile span-5 panel demo-otter">
+          <div class="panel-label mono">Otter screen · live</div>
+          <div class="otter-stage">
+            <div class="otter-frame">
+              <canvas id="demo-otter" class="otter-canvas" width="240" height="320"
+                      role="img" aria-label="The otter's face reacting to your line 2"></canvas>
+            </div>
+            <p class="bubble" id="demo-bubble" aria-live="polite">Watching the board…</p>
+          </div>
+        </div>
+
+        <div class="span-12 choices" id="demo-choices" role="group" aria-labelledby="choices-label">
+          <p id="choices-label" class="sr-only">Choose your line 2</p>
+          <button type="button" class="tile choice" data-choice="0" aria-pressed="false">
+            <span class="mono choice-key">A</span>
+            <span class="hand"><span class="frac"><span>2x sin x − x² cos x</span><span>sin² x</span></span></span>
+            <span class="mono choice-caption">Wrong rule</span>
+          </button>
+          <button type="button" class="tile choice" data-choice="1" aria-pressed="false">
+            <span class="mono choice-key">B</span>
+            <span class="hand">2x sin x + x² sin x</span>
+            <span class="mono choice-caption">Forgot a derivative</span>
+          </button>
+          <button type="button" class="tile choice" data-choice="2" aria-pressed="false">
+            <span class="mono choice-key">C</span>
+            <span class="hand">2x sin x + x cos x</span>
+            <span class="mono choice-caption">Dropped a power</span>
+          </button>
+          <button type="button" class="tile choice" data-choice="3" aria-pressed="false">
+            <span class="mono choice-key">D</span>
+            <span class="hand">2x sin x + x² cos x</span>
+            <span class="mono choice-caption">Correct</span>
+          </button>
+        </div>
+
+        <div class="tile span-12 verdict" id="verdict">
+          <div class="verdict-head">
+            <h3>What the otter did</h3>
+            <span class="mono muted" id="verdict-status">Waiting for your line 2</span>
+            <button type="button" class="btn btn-ghost btn-sm" id="demo-reset">Reset</button>
+          </div>
+          <table class="verdict-table">
+            <caption class="sr-only">What the otter did with your line 2</caption>
+            <tbody>
+              <tr><th scope="row">Verdict</th><td id="v-verdict"><span class="mono muted">Pick a line 2 above</span></td></tr>
+              <tr><th scope="row">First nudge</th><td id="v-said"><span class="mono muted">Nothing yet</span></td></tr>
+              <tr>
+                <th scope="row">Second hint</th>
+                <td>
+                  <div class="hidden-row">
+                    <span id="v-hint" class="hint-text"><span class="mono muted">Only if you keep going with the mistake</span></span>
+                    <button type="button" class="btn btn-laser btn-sm" id="v-keep" disabled>Keep going with the mistake</button>
+                  </div>
+                </td>
+              </tr>
+              <tr><th scope="row">It did</th><td id="v-did"><span class="mono muted">Nothing yet</span></td></tr>
+              <tr>
+                <th scope="row">It knew, but didn't say</th>
+                <td>
+                  <div class="hidden-row">
+                    <span class="redacted" id="v-hidden" aria-hidden="true">The otter keeps the fix to itself until you find it.</span>
+                    <span class="sr-only" id="v-hidden-sr">Hidden. Press Reveal to see it.</span>
+                    <button type="button" class="btn btn-ghost btn-sm" id="v-reveal" aria-pressed="false" disabled>Reveal</button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tile span-12 fine-print">
+          <p class="mono">Built from the robot's real templates. Notice what it never says. Confidence values are examples, and the wait is shortened: a real check takes a few seconds while Gemini reads the board.</p>
+        </div>
+      </section>
+
+      <!-- 40–50 s · HOW IT DECIDES ================================== -->
+      <section id="how" class="grid" aria-labelledby="how-title">
+        <div class="tile span-12 section-head">
+          <div class="bg-math" aria-hidden="true">
+            <svg class="bm bm-sine" viewBox="0 0 600 120" preserveAspectRatio="none">
+              <path d="M0 60 C 50 0, 100 0, 150 60 S 250 120, 300 60 S 400 0, 450 60 S 550 120, 600 60" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
+              <path d="M0 60 H600 M300 5 V115" fill="none" stroke="currentColor" stroke-width="3"/>
+            </svg>
+          </div>
+          <span class="mono muted">05 / How it decides</span>
+          <h2 id="how-title">Quiet until it's sure.</h2>
+        </div>
+
+        <ol class="span-12 steps" role="list">
+          <li class="tile step">
+            <span class="step-num mono">Step 1</span>
+            <p><strong>It watches.</strong> A 2K webcam films the board. OpenCV, in C++, finds the whiteboard, flattens it to a straight-on view and makes the ink stand out.</p>
+          </li>
+          <li class="tile step">
+            <span class="step-num mono">Step 2</span>
+            <p><strong>It waits.</strong> A check starts only when something new is on the board and nothing has moved for 5 s. At most one check every 5 s.</p>
+          </li>
+          <li class="tile step">
+            <span class="step-num mono">Step 3</span>
+            <p><strong>Gemini reads every line.</strong> Each line becomes LaTeX with a verdict: ok, wrong rule, misapplied, arithmetic or unclear. It boxes the first wrong line. If one model is unsure, the next one is asked.</p>
+          </li>
+          <li class="tile step">
+            <span class="step-num mono">Step 4</span>
+            <p><strong>SymPy re-checks the math.</strong> If it can parse the flagged line and finds it's actually correct, the flag is dropped.</p>
+          </li>
+          <li class="tile step">
+            <span class="step-num mono">Step 5</span>
+            <p><strong>The policy decides.</strong> It speaks only at confidence 0.70 or higher, once per mistake, at most every 20 s. Half-written lines and unclear ones are never spoken about.</p>
+          </li>
+          <li class="tile step">
+            <span class="step-num mono">Step 6</span>
+            <p><strong>It points and speaks.</strong> The box becomes pan and tilt through 4 calibrated corners. The laser aims, then lights for 4 s, while ElevenLabs says the nudge and the otter's mouth follows the audio.</p>
+          </li>
+        </ol>
+
+        <div class="span-12 ladder" role="list" aria-label="The hint ladder">
+          <div class="tile ladder-step" role="listitem">
+            <span class="step-num mono">Level 1 · First nudge</span>
+            <p><strong>What you were doing, and the line.</strong></p>
+            <p class="ladder-quote">“Check how you took the derivative on line 1.”</p>
+          </div>
+          <div class="tile ladder-step" role="listitem">
+            <span class="step-num mono">Level 2 · Second hint, once</span>
+            <p><strong>The exact part of the line.</strong> Only if you ask again, keep writing with the mistake still there, or nothing on the board moves for 60 s. Then it stays quiet about that mistake.</p>
+            <p class="ladder-quote">“Look at what happened to the x when you took the derivative on line 1.”</p>
+          </div>
+          <div class="tile panel ladder-step ladder-never" role="listitem">
+            <span class="step-num mono">Never</span>
+            <p><strong>The rule's name, the method, a corrected step, or the answer.</strong> A word filter checks every line before it's spoken. If a line fails, a safe fixed sentence replaces it.</p>
+          </div>
+          <div class="tile ladder-step" role="listitem">
+            <span class="step-num mono">Talk to it</span>
+            <p><strong>Tap to talk on the laptop's mic.</strong> It listens until you pause for about a second, ElevenLabs transcribes you, and Gemini answers while looking at the board. Small talk and concepts in plain words are fine. Ask about your mistake and it answers by the same rules, with the laser on that line.</p>
+          </div>
+        </div>
+
+        <div class="tile span-7 panel status-tile">
+          <h3 class="mono tile-label">System status</h3>
+          <table class="status-table">
+            <caption class="sr-only">Otter Tutor system status</caption>
+            <tbody>
+              <tr><th scope="row">Confidence to speak</th><td>0.70</td></tr>
+              <tr><th scope="row">Board still before a check</th><td>5 s</td></tr>
+              <tr><th scope="row">Between spoken nudges</th><td>20 s</td></tr>
+              <tr><th scope="row">Second hint if nothing moves</th><td>60 s</td></tr>
+              <tr><th scope="row">Laser on per flag</th><td>4 s</td></tr>
+              <tr><th scope="row">Laser safety cut-off</th><td>6 s</td></tr>
+              <tr><th scope="row">Answers given</th><td><span class="circled">0<svg class="pen-circle" aria-hidden="true"><use href="#pen-circle"/></svg></span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tile span-5 rules-tile">
+          <h3 class="mono tile-label">Rules it lives by</h3>
+          <ul class="rules" role="list">
+            <li>Name the line, never the fix.</li>
+            <li>One nudge, one hint, then quiet.</li>
+            <li>A false alarm is worse than a miss.</li>
+            <li>The laser stays below eye level.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- FINAL SETUP ================================================= -->
+      <section id="setup" class="grid" aria-labelledby="setup-title">
+        <div class="tile span-12 section-head grid-paper">
+          <span class="mono muted">06 / Final setup</span>
+          <h2 id="setup-title">From breadboard to tripod.</h2>
+        </div>
+        <ol class="span-12 strip" role="list">
+          <li class="tile strip-item lift">
+            <span class="step-num mono">Step 1 · Breadboard</span>
+            <div class="ph-frame"><img class="ph" src="assets/photos/build-first-boot.jpg" width="1200" height="1600" loading="lazy" style="object-position: 50% 45%"
+                 alt="The screen wired on a breadboard, showing the otter in inverted colors, with servos, a laser and a laptop around it."
+                 data-lightbox data-caption="Step 1 · First boot. The colors came out inverted."></div>
+            <p>First boot. The colors came out inverted.</p>
+          </li>
+          <li class="tile strip-item lift">
+            <span class="step-num mono">Step 2 · Printed case</span>
+            <div class="ph-frame"><img class="ph" src="assets/photos/build-printed-case.jpg" width="895" height="1600" loading="lazy" style="object-position: 50% 42%"
+                 alt="A hand holding the yellow 3D-printed case with otter ears, the screen inside showing the golden otter."
+                 data-lightbox data-caption="Step 2 · The first printed case, ears included."></div>
+            <p>The first printed case, ears included.</p>
+          </li>
+          <li class="tile strip-item lift">
+            <span class="step-num mono">Step 3 · Tripod</span>
+            <div class="ph-frame"><img class="ph" src="assets/photos/final-test-tripod.jpg" width="1200" height="1600" loading="lazy" style="object-position: 45% 40%"
+                 alt="The finished robot clipped onto a webcam on a tripod, held up for a test while a teammate checks it from his phone."
+                 data-lightbox data-caption="Step 3 · First full test on the tripod."></div>
+            <p>First full test on the tripod.</p>
+          </li>
+        </ol>
+      </section>
+
+      <!-- 50–60 s · BUILT IN 24 HOURS =============================== -->
+      <section id="build" class="grid" aria-labelledby="build-title">
+        <div class="tile span-12 section-head">
+          <span class="mono muted">07 / Built in 24 hours</span>
+          <h2 id="build-title">What broke, and what we did about it.</h2>
+        </div>
+
+        <div class="tile span-4 story">
+          <span class="mono muted">Quota</span>
+          <p class="story-num">20<span class="unit">req / day</span></p>
+          <p>Gemini's free tier gave us 20 requests a day. We built key rotation, model fallbacks, and a cached demo run.</p>
+        </div>
+        <div class="tile span-4 story">
+          <span class="mono muted">Arm</span>
+          <p class="story-num">0<span class="unit">collisions</span></p>
+          <p>The first arm swung straight into its own body. We tested every angle in CAD until nothing collided.</p>
+        </div>
+        <div class="tile span-4 story">
+          <span class="mono muted">False alarms</span>
+          <p class="story-num">1<span class="unit">veto</span></p>
+          <p>The AI sometimes flagged correct work. Now a math engine has veto power.</p>
+        </div>
+
+        <div class="tile span-12 stack-tile">
+          <h3 class="mono tile-label">Stack</h3>
+          <ul class="stack" role="list">
+            <li>Gemini API</li><li>ElevenLabs</li><li>OpenCV (C++)</li><li>SymPy</li><li>Python + FastAPI</li><li>ESP32</li><li>WebSocket</li><li>Bambu Lab printing</li>
+          </ul>
+        </div>
+
+        <!-- Avatars: drop chris.png, sebas.png, leandro.png, allen.png into assets/avatars/ and main.js swaps them in. -->
+        <ul class="span-12 team" role="list" aria-label="Team">
+          <li class="tile member">
+            <span class="avatar av-yellow" data-avatar="assets/avatars/chris.png" aria-hidden="true">C</span>
+            <h3>Chris</h3>
+            <p class="mono muted">The brain</p>
+            <p>Gemini vision, the SymPy check, the nudge policy and the laptop server.</p>
+          </li>
+          <li class="tile member">
+            <span class="avatar av-blue" data-avatar="assets/avatars/sebas.png" aria-hidden="true">S</span>
+            <h3>Sebas</h3>
+            <p class="mono muted">CAD + printed body</p>
+            <p>Designed and printed the body and the arm, and wired a lot of the electronics.</p>
+          </li>
+          <li class="tile member">
+            <span class="avatar av-pink" data-avatar="assets/avatars/leandro.png" aria-hidden="true">L</span>
+            <h3>Leandro</h3>
+            <p class="mono muted">Hardware</p>
+            <p>Electronics, wiring and firmware.</p>
+          </li>
+          <li class="tile member">
+            <span class="avatar av-green" data-avatar="assets/avatars/allen.png" aria-hidden="true">A</span>
+            <h3>Allen</h3>
+            <p class="mono muted">Hardware</p>
+            <p>Electronics, wiring and firmware.</p>
+          </li>
+        </ul>
+      </section>
+    </main>
+
+    <!-- FOOTER · DIRECT ASK ========================================= -->
+    <footer class="grid site-footer">
+      <div class="tile span-8 panel ask-tile">
+        <p class="ask">Bring a whiteboard. The otter brings the laser.</p>
+        <a class="btn btn-laser" href="#demo">Try the demo</a>
+      </div>
+      <div class="tile span-4 footer-info">
+        <p>Built at StormHacks 2026, SFU Burnaby. A student project, not an official StormHacks page.</p>
+        <ul class="footer-links" role="list">
+          <li><a href="#">Devpost</a> <span class="mono muted">(link to come)</span></li>
+          <li><a href="https://github.com/ChrisColbourne/Hackathon26-">GitHub</a></li>
+        </ul>
+      </div>
+      <div class="tile span-12 wordmark-tile" aria-hidden="true">
+        <span class="wordmark" data-fit>Otter Tutor</span>
+      </div>
+    </footer>
+  </div>
+
+  <dialog class="lightbox" id="lightbox" aria-label="Photo viewer">
+    <figure class="lb-figure">
+      <img id="lb-img" src="data:," alt="">
+      <figcaption id="lb-cap" class="mono"></figcaption>
+    </figure>
+    <button type="button" class="lb-btn lb-prev" id="lb-prev" aria-label="Previous photo">←</button>
+    <button type="button" class="lb-btn lb-next" id="lb-next" aria-label="Next photo">→</button>
+    <button type="button" class="lb-btn lb-close" id="lb-close" aria-label="Close">×</button>
+  </dialog>
+</body>
+</html>

@@ -1,0 +1,14 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.vscode/
+*.so
+brain/vision/build/
+brain/recordings/
+brain/calibration.json
+
+# firmware: per-machine Wi-Fi + server settings (copy secrets.example.h), backups, PlatformIO builds
+secrets.h
+*.bak
+.pio/
