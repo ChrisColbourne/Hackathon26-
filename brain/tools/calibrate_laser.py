@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import sys
 import termios
 import threading
@@ -27,6 +26,7 @@ import websockets
 
 from .. import config
 from ..calibration import CORNER_ORDER, DEFAULT_PATH, Calibration, Corner
+from .robot_link import RobotLink
 
 NAMES = {"tl": "TOP-LEFT", "tr": "TOP-RIGHT", "br": "BOTTOM-RIGHT", "bl": "BOTTOM-LEFT"}
 PAN_LIMIT, TILT_MIN, TILT_MAX = 60, -25, 15     # same limits as the firmware's config.h
@@ -45,24 +45,25 @@ def start_key_reader(loop: asyncio.AbstractEventLoop, keys: asyncio.Queue) -> No
     threading.Thread(target=run, daemon=True).start()
 
 
-async def aim(ws, pan: float, tilt: float) -> None:
-    await ws.send(json.dumps({"action": "laser", "on": True, "pan": pan, "tilt": tilt}))
+async def aim(link: RobotLink, pan: float, tilt: float) -> None:
+    link.replay = {"action": "laser", "on": True, "pan": pan, "tilt": tilt}   # re-aimed after a reconnect
+    await link.send(link.replay)
 
 
-async def calibrate(ws, keys: asyncio.Queue) -> Calibration | None:
+async def calibrate(link: RobotLink, keys: asyncio.Queue) -> Calibration | None:
     cal = Calibration.load()                    # start from the last saved (or default) corners
     for name in CORNER_ORDER:
         c: Corner = getattr(cal, name)
         pan, tilt = c.pan, c.tilt
         print(f"\n{NAMES[name]} corner: move the dot onto it, then press Enter.")
-        await aim(ws, pan, tilt)
+        await aim(link, pan, tilt)
         while True:
             sys.stdout.write(f"\r  pan {pan:+6.1f}   tilt {tilt:+6.1f}   ")
             sys.stdout.flush()
             try:
                 ch = await asyncio.wait_for(keys.get(), KEEPALIVE_S)
             except asyncio.TimeoutError:
-                await ws.send(json.dumps({"action": "laser", "on": True}))   # keep it lit, don't move
+                await link.send({"action": "laser", "on": True})   # keep it lit, don't move
                 continue
             if ch in ("\n", "\r"):
                 setattr(cal, name, Corner(pan, tilt))
@@ -74,18 +75,18 @@ async def calibrate(ws, keys: asyncio.Queue) -> Calibration | None:
                 dp, dt = STEPS[ch]
                 pan = max(-PAN_LIMIT, min(PAN_LIMIT, pan + dp))
                 tilt = max(TILT_MIN, min(TILT_MAX, tilt + dt))
-                await aim(ws, pan, tilt)
+                await aim(link, pan, tilt)
     return cal
 
 
-async def check(ws, keys: asyncio.Queue, cal: Calibration) -> bool:
+async def check(link: RobotLink, keys: asyncio.Queue, cal: Calibration) -> bool:
     print("\nChecking: the dot should land in the MIDDLE of the board. Does it? [y/n] ", end="", flush=True)
-    await aim(ws, *cal.angles_at(0.5, 0.5))
+    await aim(link, *cal.angles_at(0.5, 0.5))
     while True:
         try:
             ch = await asyncio.wait_for(keys.get(), KEEPALIVE_S)
         except asyncio.TimeoutError:
-            await ws.send(json.dumps({"action": "laser", "on": True}))
+            await link.send({"action": "laser", "on": True})
             continue
         if ch.lower() in ("y", "n"):
             print(ch)
@@ -93,28 +94,22 @@ async def check(ws, keys: asyncio.Queue, cal: Calibration) -> bool:
 
 
 async def main(port: int) -> int:
-    robot: asyncio.Queue = asyncio.Queue(maxsize=1)
+    link = RobotLink()
     keys: asyncio.Queue = asyncio.Queue()
 
-    async def handler(ws) -> None:
-        print("robot connected.")
-        await robot.put(ws)
-        async for _ in ws:                      # drain the robot's "done" replies so its sends never block
-            pass
-
-    async with websockets.serve(handler, "0.0.0.0", port):
+    async with websockets.serve(link.handler, "0.0.0.0", port):
         print(f"waiting for the robot on port {port} (press EN on the ESP32 if it doesn't connect in ~10 s)...")
-        ws = await robot.get()
+        await link.wait()
         print("The laser switches on now. Keep it away from people's eyes.")
         old = termios.tcgetattr(sys.stdin)
         tty.setcbreak(sys.stdin.fileno())
         start_key_reader(asyncio.get_running_loop(), keys)
         try:
-            cal = await calibrate(ws, keys)
+            cal = await calibrate(link, keys)
             if cal is None:
                 print("\nquit; nothing saved.")
                 return 1
-            if not await check(ws, keys, cal):
+            if not await check(link, keys, cal):
                 print("Not saved. Run it again and aim each corner a bit more carefully.")
                 return 1
             cal.save()
@@ -123,9 +118,13 @@ async def main(port: int) -> int:
             return 0
         finally:
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old)
-            await ws.send(json.dumps({"action": "laser", "on": False}))
-            await ws.send(json.dumps({"action": "home"}))
+            link.replay = None
+            await link.send({"action": "laser", "on": False}, wait_s=3)
+            await link.send({"action": "home"}, wait_s=1)
             await asyncio.sleep(0.3)
+            if link.reconnects:
+                print(f"\nThe robot dropped off {link.reconnects} time(s) during this run. Restarts after a "
+                      "head move mean the power supply is too weak for the servos (see COMMANDS.txt).")
 
 
 if __name__ == "__main__":

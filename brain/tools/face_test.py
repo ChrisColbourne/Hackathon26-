@@ -14,13 +14,13 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import math
 import sys
 
 import websockets
 
 from .. import config
+from .robot_link import RobotLink
 
 MOODS = ["idle", "listening", "thinking", "talking", "happy", "confused"]
 LOOKS = {
@@ -33,46 +33,34 @@ LOOKS = {
 }
 
 
-async def show(ws, mood: str, hold_s: float, acks: list[str]) -> None:
-    before = acks.count("face")
-    await ws.send(json.dumps({"action": "face", "state": mood}))
+async def show(link: RobotLink, mood: str, hold_s: float) -> None:
+    before = link.acks.count("face")
+    await link.send({"action": "face", "state": mood})
     print(f"  {mood.upper():<10} should look like: {LOOKS[mood]}")
     t = 0.0
     while t < hold_s:
         if mood == "talking":          # drive the mouth like the voice does, ~15 levels/s
             level = abs(math.sin(t * 11) * math.sin(t * 7.3 + 1))
-            await ws.send(json.dumps({"action": "mouth", "level": round(level, 2)}))
+            await link.send({"action": "mouth", "level": round(level, 2)})
         await asyncio.sleep(1 / 15)
         t += 1 / 15
-    print(f"  {'':<10} robot acknowledged: {'yes' if acks.count('face') > before else 'NO'}")
+    print(f"  {'':<10} robot acknowledged: {'yes' if link.acks.count('face') > before else 'NO'}")
 
 
 async def main(port: int, only: str | None, hold_s: float) -> int:
-    robot: asyncio.Queue = asyncio.Queue(maxsize=1)
-    acks: list[str] = []
-
-    async def handler(ws) -> None:
-        print("robot connected.\n")
-        await robot.put(ws)
-        async for msg in ws:                 # drain the robot's replies so its sends never block
-            try:
-                m = json.loads(msg)
-            except ValueError:
-                continue
-            if m.get("status") == "done":
-                acks.append(m.get("action", ""))
-
-    async with websockets.serve(handler, "0.0.0.0", port):
+    link = RobotLink()
+    async with websockets.serve(link.handler, "0.0.0.0", port):
         print(f"waiting for the robot on port {port} (press EN on the ESP32 if it doesn't connect in ~10 s)...")
-        ws = await robot.get()
-        await ws.send(json.dumps({"action": "home"}))
+        await link.wait()
+        print()
+        await link.send({"action": "home"})
         await asyncio.sleep(1.0)
         if only:
-            await show(ws, only, float("inf") if hold_s <= 0 else hold_s, acks)
+            await show(link, only, float("inf") if hold_s <= 0 else hold_s)
         else:
             for mood in MOODS:
-                await show(ws, mood, hold_s, acks)
-        await ws.send(json.dumps({"action": "face", "state": "idle"}))
+                await show(link, mood, hold_s)
+        await link.send({"action": "face", "state": "idle"}, wait_s=3)
         await asyncio.sleep(0.5)
     return 0
 

@@ -189,6 +189,12 @@ Otter can't hear you
     -> run the voice test (section 2). Speak closer to the laptop; the webcam mic is never used.
 Laser points at the wrong place
     -> run the laser calibration (section 2).
+Robot keeps restarting (screen flickers/redraws, "robot reconnected" right after the head moves,
+laser never comes on)
+    -> the servos pull the power supply so low that the ESP32 resets (a "brownout").
+       Quick fix: plug the ESP32's USB into the LAPTOP instead of a phone charger/power bank.
+       Proper fix: power the servos from their own 5 V supply (2 A or more), connect its GND to the
+       ESP32's GND, and put a 470-1000 uF capacitor across the servo 5 V and GND.
 Camera black / wrong camera
     -> open the webcam's privacy shutter; the USB webcam is picked automatically ("WEB CAM").
 "Permission denied: /dev/ttyUSB0"
