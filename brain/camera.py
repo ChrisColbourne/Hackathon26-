@@ -161,8 +161,10 @@ class SettleDetector:
     last_motion: float = 0.0
     last_changed: float = 1.0
 
-    def update(self, flat: np.ndarray, now: float | None = None) -> bool:
-        """Feed one prepared frame. Returns True when it's time to call Gemini."""
+    def update(self, flat: np.ndarray, now: float | None = None, armed: bool = True) -> bool:
+        """Feed one prepared frame. Returns True when it's time to call Gemini.
+        armed=False (paused) still tracks motion but never fires, so on resume
+        the board is compared with the last one actually checked."""
         now = time.monotonic() if now is None else now
         gray = cv2.cvtColor(flat, cv2.COLOR_BGR2GRAY) if flat.ndim == 3 else flat
 
@@ -175,7 +177,7 @@ class SettleDetector:
         self.last_changed = change_score(self._last_analyzed, gray) if self._last_analyzed is not None else 1.0
         settled = now - self._still_since >= self.still_s
         spaced = now - self._last_trigger >= self.min_interval_s
-        if settled and spaced and self.last_changed > self.change_thr:
+        if armed and settled and spaced and self.last_changed > self.change_thr:
             self._last_analyzed = gray
             self._last_trigger = now
             return True

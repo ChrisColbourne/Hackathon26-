@@ -18,6 +18,7 @@ test_server.py all use port 8000. Stop one (q or Ctrl+C) before starting another
         Keys (click the preview window first, or type the key + Enter in the terminal):
             c = check the board now
             t = talk to the otter (tap, ask out loud, it stops when you go quiet; tap t again to stop early)
+            p = pause/resume the automatic checks (no Gemini calls while paused; c and t still work)
             b = toggle whiteboard detection on/off
             q = quit
         At startup look for:  "waiting for the robot at ws://10.72.180.48:8000/robot"
