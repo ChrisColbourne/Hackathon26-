@@ -1,0 +1,11 @@
+# Netlify publishes the project website (website/) at https://ottertutor.tech.
+# Plain HTML/CSS/JS: nothing to build. Every push to the connected branch redeploys it.
+[build]
+  publish = "website"
+  command = ""
+
+# Photos and video rarely change: let browsers cache them for a week.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"

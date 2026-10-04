@@ -6,6 +6,7 @@
   <title>Otter Tutor · It sees your mistake. It won't tell you the answer.</title>
   <meta name="description" content="A desk robot that watches you solve calculus on a whiteboard, points a laser at the line where it went wrong, and lets you fix it yourself. Built at StormHacks 2026.">
   <meta name="theme-color" content="#E2E3E5">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=JetBrains+Mono:wght@400;500;700&family=Kalam:wght@700&display=swap">
@@ -143,7 +144,7 @@
             <tbody>
               <tr><th scope="row">Display</th><td>2.8" ILI9341 · 240×320, portrait</td></tr>
               <tr><th scope="row">Moods</th><td>6: idle, listening, thinking, talking, happy, confused</td></tr>
-              <tr><th scope="row">Arm</th><td>2× SG90 · pan ±60°, tilt −25° to +15°, eased at up to 150°/s</td></tr>
+              <tr><th scope="row">Arm</th><td>2× SG90 · pan ±60°, tilt −40° to +15°, eased at up to 150°/s</td></tr>
               <tr><th scope="row">Pointer</th><td>Red laser. Aims first, then lights for 4 s. The firmware cuts it at 6 s.</td></tr>
               <tr><th scope="row">Eyes</th><td>2K USB webcam, read at 1920×1080</td></tr>
               <tr><th scope="row">Ears</th><td>The laptop's own mic, tap to talk. Never the webcam mic.</td></tr>
@@ -210,7 +211,7 @@
               <tbody>
                 <tr data-part="esp32"><td>1</td><td>ESP32 DevKit</td><td>—</td><td>Runs the face, servos and laser. Joins the laptop over Wi-Fi.</td></tr>
                 <tr data-part="pan"><td>2</td><td>Pan servo (SG90)</td><td>GPIO 25</td><td>Turns the head ±60° left and right.</td></tr>
-                <tr data-part="tilt"><td>3</td><td>Tilt servo (SG90)</td><td>GPIO 26</td><td>Tilts from −25° to +15°, so the laser stays below eye level.</td></tr>
+                <tr data-part="tilt"><td>3</td><td>Tilt servo (SG90)</td><td>GPIO 26</td><td>Tilts from −40° to +15°, so the laser stays below eye level.</td></tr>
                 <tr data-part="laser"><td>4</td><td>Laser (KY-008), NPN, 1 kΩ</td><td>GPIO 27</td><td>The pointer. The firmware turns it off after 6 s.</td></tr>
                 <tr data-part="screen"><td>5</td><td>2.8" ILI9341 screen</td><td>MOSI 23 · SCLK 18 · MISO 19 · CS 5 · DC 16 · RST 17</td><td>The otter's face, over SPI, portrait 240×320.</td></tr>
                 <tr data-part="cap"><td>6</td><td>470 µF capacitor</td><td>Power rail</td><td>Sits across the breadboard's power rail.</td></tr>
