@@ -200,3 +200,16 @@ Camera black / wrong camera
     -> open the webcam's privacy shutter; the USB webcam is picked automatically ("WEB CAM").
 "Permission denied: /dev/ttyUSB0"
     -> sudo chmod a+rw /dev/ttyUSB0
+
+
+9. PROJECT WEBSITE (ottertutor.tech)
+------------------------------------
+The site is plain HTML/CSS/JS in website/ (no build step). Netlify publishes it from GitHub
+(settings in netlify.toml) and redeploys by itself after every push to the connected branch.
+
+    python3 -m http.server 8080 --directory website      preview it locally -> http://localhost:8080
+                                                         (8080, so it doesn't clash with brain.server on 8000)
+    Live: https://ottertutor.tech   (plus the Netlify address, e.g. https://ottertutor.netlify.app)
+
+Team avatars go in website/assets/avatars/ as leandro.png, sebas.png, chris.png, allen.png
+(until then the page shows initial letters).

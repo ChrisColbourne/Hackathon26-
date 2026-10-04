@@ -14,3 +14,6 @@ secrets.h
 *.bak
 .pio/
 /build/
+
+# Website working folder (repo copies, raw assets); the published site lives in website/
+websiteCode/
