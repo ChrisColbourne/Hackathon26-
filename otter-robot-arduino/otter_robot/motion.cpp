@@ -19,9 +19,15 @@ void begin() {
   ESP32PWM::allocateTimer(1);
   sPan.setPeriodHertz(50);
   sTilt.setPeriodHertz(50);
+  // One servo at a time: both jumping to centre together at power-up pulled the
+  // supply low enough to reset the ESP32, which then did it again (restart loop,
+  // on a phone charger, Oct 4).
   sPan.attach(PIN_PAN, 500, 2400);
+  write();
+  delay(400);
   sTilt.attach(PIN_TILT, 500, 2400);
   write();
+  delay(400);
   last = millis();
 }
 
@@ -49,8 +55,10 @@ bool update() {
   float dt = (now - last) / 1000.0f;
   last = now;
   float maxStep = SERVO_SPEED * dt;
-  curP = stepTo(curP, tgtP, maxStep);
-  curT = stepTo(curT, tgtT, maxStep);
+  // Pan first, then tilt: two servos starting together is the current spike that
+  // browns out a weak supply. Aiming takes a few tenths of a second longer.
+  if (fabsf(tgtP - curP) >= 0.3f) curP = stepTo(curP, tgtP, maxStep);
+  else curT = stepTo(curT, tgtT, maxStep);
   write();
   if (wasMoving && !moving()) { wasMoving = false; return true; }
   return false;
