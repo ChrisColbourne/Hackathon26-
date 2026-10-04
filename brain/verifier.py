@@ -118,6 +118,18 @@ def _solution_set(eq_latex: str):
         return None
 
 
+def _arithmetic_ok(latex: str) -> bool | None:
+    """A line of plain numbers ('1 + 1 = 3'): are all its sides equal? None if it
+    has a variable, isn't an equation, or won't parse."""
+    sides = [p for p in latex.split("=") if p.strip()]
+    if len(sides) < 2:
+        return None
+    vals = [_parse(side) for side in sides]
+    if any(v is None or v.free_symbols for v in vals):
+        return None
+    return all(_equiv(vals[0], v) is True for v in vals[1:])
+
+
 # ---- main entry ------------------------------------------------------------
 
 def verify(analysis: BoardAnalysis) -> VerifierResult:
@@ -132,8 +144,13 @@ def verify(analysis: BoardAnalysis) -> VerifierResult:
             res.line_ok[step.line] = None
             continue
 
-        ok: bool | None = None
-        if topic == "derivative":
+        # Plain arithmetic is checked as written. (Gemini sometimes reads the
+        # student's '1 + 1 = 3' as the problem itself, and comparing a line to
+        # itself would "prove" it right.)
+        ok = _arithmetic_ok(step.latex)
+        if ok is not None:
+            pass
+        elif topic == "derivative":
             target = _derivative_target(analysis.problem)
             student = _parse(_rhs(step.latex))
             if target is not None and student is not None:
@@ -145,7 +162,7 @@ def verify(analysis: BoardAnalysis) -> VerifierResult:
                 ok = _equiv(sp.diff(student, x), integrand)   # d/dx of their answer == integrand (ignores +C)
         elif topic == "algebra" and "=" in analysis.problem and "=" in step.latex:
             s0, s1 = _solution_set(analysis.problem), _solution_set(step.latex)
-            if s0 is not None and s1 is not None:
+            if s0 is not None and s1 is not None and s0 != sp.S.EmptySet:   # no solutions: nothing to compare
                 try:
                     ok = bool(sp.simplify(s0) == sp.simplify(s1))
                 except Exception:

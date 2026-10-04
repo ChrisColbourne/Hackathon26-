@@ -14,6 +14,7 @@ writing doesn't drain the daily quota.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -110,6 +111,8 @@ class Camera:
 
     def __init__(self, index: int = 0, width: int = 1920, height: int = 1080, fps: int = 15):
         self.cap = cv2.VideoCapture(index, cv2.CAP_V4L2)
+        # read() runs in a worker thread; releasing mid-read crashed Python on quit (segfault)
+        self._lock = threading.Lock()
         # MJPG is what lets UVC webcams deliver high resolution at a usable frame rate.
         self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
@@ -124,11 +127,15 @@ class Camera:
         return int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
     def read(self) -> np.ndarray | None:
-        ok, frame = self.cap.read()
+        with self._lock:
+            if not self.cap.isOpened():
+                return None
+            ok, frame = self.cap.read()
         return frame if ok else None
 
     def release(self) -> None:
-        self.cap.release()
+        with self._lock:                      # waits for a read in progress to finish
+            self.cap.release()
 
     def __enter__(self) -> "Camera":
         return self

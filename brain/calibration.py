@@ -42,7 +42,7 @@ class Calibration:
         return cls(**{k: Corner(**v) for k, v in d.items()})
 
     def save(self, path: Path = DEFAULT_PATH) -> None:
-        path.write_text(json.dumps({k: asdict(v) for k, v in asdict(self).items()}, indent=2))
+        path.write_text(json.dumps(asdict(self), indent=2))     # asdict recurses into the Corners
 
     def angles_at(self, u: float, v: float) -> tuple[float, float]:
         """u, v in 0..1 across the board (left->right, top->bottom)."""
