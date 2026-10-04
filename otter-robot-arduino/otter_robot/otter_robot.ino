@@ -26,7 +26,12 @@ static void handle(const char* json, size_t len) {
 
   if (!strcmp(a, "face")) { otter::setMood(doc["state"] | "idle"); reply("face"); }
   else if (!strcmp(a, "mouth")) { otter::setMouth(doc["level"] | 0.0f); }
-  else if (!strcmp(a, "look")) { motion::look(doc["pan"] | 0.0f, doc["tilt"] | 0.0f); strcpy(pending, "look"); }
+  else if (!strcmp(a, "look")) {
+    // SAFETY: a plain look never carries the laser along. Without this, a look
+    // arriving after a laser command re-targeted it (fired off-target) or swept a lit beam.
+    laser::set(false); laserAfterMove = false;
+    motion::look(doc["pan"] | 0.0f, doc["tilt"] | 0.0f); strcpy(pending, "look");
+  }
   else if (!strcmp(a, "laser")) {
     bool on = doc["on"] | false;
     if (!on) { laser::set(false); laserAfterMove = false; reply("laser"); }

@@ -51,8 +51,10 @@ async def console():
         await robot.send(json.dumps(cmd)); print("->", cmd)
 
 async def main():
-    async with websockets.serve(handler, "0.0.0.0", 8765):
-        print("test server on ws://0.0.0.0:8765/robot - put this laptop's IP in secrets.h")
+    # Same port as brain.server, so the firmware needs no change between the two.
+    # Run one or the other, not both.
+    async with websockets.serve(handler, "0.0.0.0", 8000):
+        print("test server on ws://0.0.0.0:8000/robot - put this laptop's IP in secrets.h")
         await console()
 
 asyncio.run(main())

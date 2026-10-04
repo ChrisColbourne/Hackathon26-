@@ -56,7 +56,7 @@ Hackathon26-/
   brain/vision/   B · C++ OpenCV module (board crop/deskew + change detection), pybind11
   brain/voice.py  C · ElevenLabs speak()/listen(), runs inside the brain process
   app/            C · web app (static HTML/JS) served by the brain
-  firmware/       A · ESP32 PlatformIO project; D's otter module lives in firmware/src/otter/
+  otter-robot-arduino/  A+D · ESP32 Arduino IDE sketch (otter face, servos, laser); see its README
   dashboard/      B/C · .tech site (session summaries), reached via ngrok
   docs/           this file, wiring, contracts, demo script
   .env            secrets (gitignored). GEMINI_API_KEY, ELEVENLABS_API_KEY, TIGER_DSN, ...
