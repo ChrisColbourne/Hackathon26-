@@ -147,7 +147,8 @@ def _window_key(view: np.ndarray) -> str | None:
 def run_camera(index: str, show: bool, brain: Brain, policy: Policy, robot: Robot) -> int:
     if show:
         quiet_qt_fonts()
-    det = SettleDetector(still_s=config.STILL_S, min_interval_s=config.MIN_CHECK_INTERVAL_S)
+    det = SettleDetector(still_s=config.STILL_S, min_interval_s=config.MIN_CHECK_INTERVAL_S,
+                             change_thr=config.CHANGE_THR)
     detect = config.BOARD_DETECT
     stuck_announced = False
     dark_warned = False

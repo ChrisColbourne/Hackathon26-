@@ -81,7 +81,7 @@ def sanitize_nudge(text: str, kind: StepStatus | None, line: int | None) -> str:
 class Policy:
     threshold: float = 0.7
     cooldown_s: float = 20.0
-    _flagged: set[tuple[str, int, str]] = field(default_factory=set)
+    _flagged: set[tuple[str, int, str, str]] = field(default_factory=set)
     _praised: set[str] = field(default_factory=set)
     _last_spoke: float = -1e9
 
@@ -114,7 +114,9 @@ class Policy:
         if v is not None and v.veto_line == fe.line:
             return Decision(False, mood="idle", line=fe.line, kind=fe.status, reason=v.note)
 
-        key = (key_problem, fe.line, fe.status.value)
+        # Include what's written on the line: rewriting '= 2' as '= 8' is a new
+        # attempt and deserves a new nudge; re-reading the same '= 2' does not.
+        key = (key_problem, fe.line, fe.status.value, _norm(fe.latex))
         if key in self._flagged:
             return Decision(False, mood="confused", line=fe.line, kind=fe.status, box=fe.box,
                             reason="already flagged")

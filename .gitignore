@@ -12,3 +12,4 @@ brain/calibration.json
 secrets.h
 *.bak
 .pio/
+/build/
